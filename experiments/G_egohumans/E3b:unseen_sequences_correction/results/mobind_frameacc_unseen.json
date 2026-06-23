@@ -1,0 +1,29 @@
+{
+  "model": "MoBInd_stage2_official",
+  "num_sequences": 4,
+  "sequences": [
+    {
+      "sequence_id": "custom_01_002",
+      "frame_acc": 0.978891820580475,
+      "num_frames": 220
+    },
+    {
+      "sequence_id": "custom_03_001",
+      "frame_acc": 0.9804031354983203,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_04_005",
+      "frame_acc": 0.9616775126536515,
+      "num_frames": 501
+    },
+    {
+      "sequence_id": "custom_05_002",
+      "frame_acc": 0.9660234899328859,
+      "num_frames": 601
+    }
+  ],
+  "mean_frame_acc": 0.9717489896663332,
+  "window_size": 100,
+  "stride": 16
+}

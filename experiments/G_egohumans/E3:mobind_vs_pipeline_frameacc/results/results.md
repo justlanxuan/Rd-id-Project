@@ -1,7 +1,9 @@
 # E3 Results: MoBInd vs. Pipeline FrameAcc on EgoHumans
 
+> ⚠️ **重要修正（2026-06-24）：** 本实验使用的 16 个序列属于 MoBInd 官方 `train` split，因此 MoBInd checkpoint 在训练时见过它们，不是严格的泛化测试。严格 unseen 的对比请参见 `experiments/G_egohumans/E3b:unseen_sequences_correction/results/results.md`（4 个序列，双方均 unseen）。
+
 ## 目标
-在完全相同的 16 个 EgoHumans 序列上，用 **MoBInd 官方 checkpoint** 和 **我们自己的 trained pipeline** 分别计算 IMU-to-person identification 的 **FrameAcc**，并保证 MoBInd 没有在测试序列上训练过。
+在完全相同的 16 个 EgoHumans 序列上，用 **MoBInd 官方 checkpoint** 和 **我们自己的 trained pipeline** 分别计算 IMU-to-person identification 的 **FrameAcc**。
 
 ## 测试序列
 仅使用 MoBInd 官方 train split 中的 16 个序列，排除与 MoBInd test/val 重叠的 4 个序列：
