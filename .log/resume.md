@@ -3,35 +3,34 @@
 > ⚠️ **写给 AI:** 本文件是人机协作的唯一状态机断点。在每次迭代结束或实验中断前，必须精确更新以下字段，严禁留空。
 
 ## 1. 当前所处阶段 (Current Stage)
-* **实验期:** G_egohumans — **E2:mobind_reproduce 已完成**
-* **当前具体执行任务:** MoBInd 官方 EgoHumans 基线复现（retrieval / localization / sync）已全部跑通并归档。
-* **当前子任务:** 完成 E2 结果汇总与文档更新。
+* **实验期:** G_egohumans — **E3:mobind_vs_pipeline_frameacc 已完成**
+* **当前具体执行任务:** 在完全相同的 16 个 MoBInd-train-only EgoHumans 序列上，对齐 MoBInd 官方 checkpoint 与我们 trained pipeline 的 FrameAcc 指标。
+* **当前子任务:** E3 结果已汇总，等待最终 commit/push。
 
 ## 2. 最新成果
-* E2 实验沙盒已按 HAROS 规范创建并完结：
-  * `experiments/G_egohumans/E2:mobind_reproduce/results/results.md`
-  * `experiments/G_egohumans/E2:mobind_reproduce/progress.md`
-  * `experiments/G_egohumans/E2:mobind_reproduce/scripts/A1_run_full_repro.sh`
-  * `experiments/G_egohumans/E2:mobind_reproduce/scripts/B1_visualize_results.py`
-  * `results/figures/` 下 3 张图表
-* 复现结果（stage2 MAE checkpoint）：
-  * Retrieval：IMU→Video R@1 = 0.8264，Video→IMU R@1 = 0.8368
-  * Localization：Person 98.01%，Limb 89.22%
-  * Sync：Person-level MAE 0.0421s / Acc@0.2 0.9925；Video-level MAE 0.0392s / Acc@0.2 1.0000
-* MoBind 本地修改未提交到 upstream（外部依赖仓库）：
-  * `preprocess/EgoHumans/cache.py`
-  * `preprocess/EgoHumans/cache_multi_person.py`
-  * `builder/build_model.py`
-  * `eval_sync_egoh.py`
+* E3 实验沙盒已按 HAROS 规范创建并完结：
+  * `experiments/G_egohumans/E3:mobind_vs_pipeline_frameacc/plan.md`
+  * `experiments/G_egohumans/E3:mobind_vs_pipeline_frameacc/progress.md`
+  * `experiments/G_egohumans/E3:mobind_vs_pipeline_frameacc/test/test.md`
+  * `scripts/A1_eval_mobind_frameacc.py`
+  * `scripts/A2_eval_ours_frameacc_subset.py`
+  * `scripts/A3_compare_results.py`
+  * `results/results.md`
+  * `results/figures/frameacc_comparison.png`
+* 核心结果（16 个 train-only 序列）：
+  * **MoBInd official stage2**: mean FrameAcc = **0.9654**
+  * **Our pipeline**: mean FrameAcc = **0.9562**
+  * 差距：MoBInd 领先 **+0.93 pp**
+* E2 基线仍保留：Retrieval R@1 ~83%，Localization Person 98.0% / Limb 89.2%，Sync Acc@0.2 ~99–100%。
+* MoBind 本地修改已保存为 patch：`third-party/mobind_egohumans_fixes.patch`。
 
 ## 3. 当前阻塞痛点 (Blockers & Issues)
-* MoBInd 为外部仓库，本地修复未 commit/push，仅用于当前复现。
-* `experiments/` 目录在 Autism-project `.gitignore` 中，E2 文档未进 git（HAROS 实验区本地化）。
+* 无阻塞。
+* 需注意：E3 使用了与 E2 相同的 MoBInd 官方 checkpoint；所有对比序列均来自 MoBInd train split，无 test-set 泄漏。
 
 ## 4. 下一步行动 (Next Actions)
-* [ ] 决定是否需要将 E2 实验区文件强制 add 到 `egohumans` 分支。
-* [ ] 决定是否需要将 MoBind 修改 fork/ patch 保存。
-* [ ] 基于 E2 基线，设计后续改进实验（E3），例如：
-  * 使用自定义 pose estimator / 2D keypoint 提取替换官方输入；
-  * 在 sync 任务上引入 TCN/Transformer 对齐改进；
-  * 对比单模态 vs 跨模态检索在 EgoHumans 上的性能边界。
+* [ ] 将 E3 实验区文件强制 add 并 push 到 `egohumans` 分支。
+* [ ] 基于 E3 结论，考虑后续改进实验（E4），例如：
+  * 在同样 16 序列上用 MoBInd 的 5 秒窗口重新训练/微调我们的模型；
+  * 将 MoBInd 的 IMU encoder 作为我们 pipeline 的初始化；
+  * 消融不同输入预处理（COCO pose2d vs H36M skeleton）对 FrameAcc 的影响。

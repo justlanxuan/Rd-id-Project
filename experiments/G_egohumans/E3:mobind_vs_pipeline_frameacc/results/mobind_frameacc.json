@@ -1,0 +1,89 @@
+{
+  "model": "MoBInd_stage2_official",
+  "num_sequences": 16,
+  "sequences": [
+    {
+      "sequence_id": "custom_01_011",
+      "frame_acc": 0.9329102447869447,
+      "num_frames": 761
+    },
+    {
+      "sequence_id": "custom_02_001",
+      "frame_acc": 0.9730861244019139,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_03_009",
+      "frame_acc": 0.9922057677318784,
+      "num_frames": 431
+    },
+    {
+      "sequence_id": "custom_04_011",
+      "frame_acc": 1.0,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_05_007",
+      "frame_acc": 0.9783898305084746,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_06_006",
+      "frame_acc": 0.9259567387687188,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_06_019",
+      "frame_acc": 0.9846014492753623,
+      "num_frames": 301
+    },
+    {
+      "sequence_id": "custom_06_024",
+      "frame_acc": 0.9326347305389222,
+      "num_frames": 501
+    },
+    {
+      "sequence_id": "custom_06_025",
+      "frame_acc": 0.9732999582811848,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_06_036",
+      "frame_acc": 0.9442595673876872,
+      "num_frames": 601
+    },
+    {
+      "sequence_id": "custom_06_040",
+      "frame_acc": 0.9969230769230769,
+      "num_frames": 251
+    },
+    {
+      "sequence_id": "custom_06_041",
+      "frame_acc": 0.9676616915422885,
+      "num_frames": 201
+    },
+    {
+      "sequence_id": "custom_06_054",
+      "frame_acc": 0.9637096774193549,
+      "num_frames": 496
+    },
+    {
+      "sequence_id": "custom_06_060",
+      "frame_acc": 0.8839779005524862,
+      "num_frames": 362
+    },
+    {
+      "sequence_id": "custom_07_007",
+      "frame_acc": 0.9987105093488072,
+      "num_frames": 1551
+    },
+    {
+      "sequence_id": "custom_07_011",
+      "frame_acc": 0.998683633172444,
+      "num_frames": 1141
+    }
+  ],
+  "mean_frame_acc": 0.9654381812899715,
+  "window_size": 100,
+  "stride": 16
+}

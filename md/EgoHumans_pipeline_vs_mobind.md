@@ -54,8 +54,21 @@
 | **Our pipeline** | synchronous HOTA | 0.887 | 时序跟踪指标 |
 | **Our pipeline** | synchronous FrameAcc | 0.956 | 逐帧匹配准确率 |
 
+### 2.4 E3 严格对齐的 FrameAcc 对比（推荐参考）
+
+在 `experiments/G_egohumans/E3:mobind_vs_pipeline_frameacc/` 中，我们在**完全相同的 16 个 EgoHumans 序列**上（且均为 MoBInd train split，无 test-set 泄漏）重新计算了 FrameAcc：
+
+| 方法 | 窗口 | 输入 | Mean FrameAcc |
+|------|------|------|---------------|
+| **MoBInd official** | 5 秒（100 帧） | raw IMU (5 sensors) + COCO pose2d | **0.9654** |
+| **Our pipeline** | 1.2 秒（24 帧） | 48-D IMU + H36M skeleton | **0.9562** |
+
 **解读**：
-- MoBInd 直接**回归时间偏移**，MAE 仅约 40 ms，Acc@0.2 接近 100%，说明其同步能力很强。
+- 这是目前最公平的同任务对比：两者都使用相同的 extract tracks 和 `gt_to_extract_map`。
+- MoBInd 领先约 **0.93 pp**，优势很小。
+- 说明我们的 pipeline 在 person-level IMU-to-person identification 上已经达到与官方 MoBInd checkpoint 相近的水平。
+
+## 3. 综合判断
 - 我们的 pipeline **不显式回归偏移**，而是通过逐帧嵌入匹配完成关联。FrameAcc 95.6% 也不错，但任务定义不同。
 - 若目标是“精确估计 IMU 与 video 的时间差”，MoBInd 更优；若目标是“持续保持 IMU 与 skeleton 的身份关联”，我们的跟踪指标也有竞争力。
 
