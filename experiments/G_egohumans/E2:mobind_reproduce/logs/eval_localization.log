@@ -1,0 +1,17 @@
+Loading stage 1 model from ./checkpoints/EgoHumans/stage1
+Model: 8.19M params | Device: cuda
+Test samples: 299
+Person localization:   0%|          | 0/299 [00:00<?, ?it/s]Person localization:   0%|          | 1/299 [00:00<02:12,  2.25it/s]Person localization:   7%|▋         | 21/299 [00:00<00:05, 49.90it/s]Person localization:  13%|█▎        | 38/299 [00:00<00:03, 80.04it/s]Person localization:  19%|█▉        | 58/299 [00:00<00:02, 111.44it/s]Person localization:  26%|██▌       | 78/299 [00:00<00:01, 134.91it/s]Person localization:  33%|███▎      | 98/299 [00:00<00:01, 151.12it/s]Person localization:  39%|███▉      | 118/299 [00:01<00:01, 163.75it/s]Person localization:  46%|████▌     | 138/299 [00:01<00:00, 172.90it/s]Person localization:  53%|█████▎    | 158/299 [00:01<00:00, 179.73it/s]Person localization:  60%|█████▉    | 178/299 [00:01<00:00, 184.45it/s]Person localization:  66%|██████▌   | 198/299 [00:01<00:00, 188.04it/s]Person localization:  73%|███████▎  | 218/299 [00:01<00:00, 183.10it/s]Person localization:  80%|███████▉  | 238/299 [00:01<00:00, 187.72it/s]Person localization:  86%|████████▋ | 258/299 [00:01<00:00, 190.97it/s]Person localization:  93%|█████████▎| 278/299 [00:01<00:00, 193.59it/s]Person localization: 100%|█████████▉| 298/299 [00:01<00:00, 195.11it/s]Person localization: 100%|██████████| 299/299 [00:01<00:00, 149.96it/s]
+
+Person Localization Accuracy by #People:
+P        Clips   Accuracy
+-------------------------
+2           97    100.00%
+3           46    100.00%
+4          156     96.96%
+
+Overall: 98.01%
+
+Limb localization:   0%|          | 0/299 [00:00<?, ?it/s]Limb localization:   4%|▎         | 11/299 [00:00<00:02, 109.99it/s]Limb localization:   8%|▊         | 23/299 [00:00<00:02, 113.58it/s]Limb localization:  12%|█▏        | 35/299 [00:00<00:02, 114.47it/s]Limb localization:  16%|█▌        | 47/299 [00:00<00:02, 114.91it/s]Limb localization:  20%|█▉        | 59/299 [00:00<00:02, 115.25it/s]Limb localization:  24%|██▎       | 71/299 [00:00<00:01, 115.32it/s]Limb localization:  28%|██▊       | 83/299 [00:00<00:01, 115.45it/s]Limb localization:  32%|███▏      | 95/299 [00:00<00:01, 115.42it/s]Limb localization:  36%|███▌      | 107/299 [00:00<00:01, 115.39it/s]Limb localization:  40%|███▉      | 119/299 [00:01<00:01, 115.59it/s]Limb localization:  44%|████▍     | 131/299 [00:01<00:01, 115.72it/s]Limb localization:  48%|████▊     | 143/299 [00:01<00:01, 115.86it/s]Limb localization:  52%|█████▏    | 155/299 [00:01<00:01, 115.97it/s]Limb localization:  56%|█████▌    | 167/299 [00:01<00:01, 115.90it/s]Limb localization:  60%|█████▉    | 179/299 [00:01<00:01, 115.89it/s]Limb localization:  64%|██████▍   | 191/299 [00:01<00:00, 116.12it/s]Limb localization:  68%|██████▊   | 203/299 [00:01<00:00, 115.87it/s]Limb localization:  72%|███████▏  | 215/299 [00:01<00:00, 116.34it/s]Limb localization:  76%|███████▌  | 227/299 [00:01<00:00, 116.46it/s]Limb localization:  80%|███████▉  | 239/299 [00:02<00:00, 116.59it/s]Limb localization:  84%|████████▍ | 251/299 [00:02<00:00, 116.75it/s]Limb localization:  88%|████████▊ | 263/299 [00:02<00:00, 116.73it/s]Limb localization:  92%|█████████▏| 275/299 [00:02<00:00, 116.89it/s]Limb localization:  96%|█████████▌| 287/299 [00:02<00:00, 116.78it/s]Limb localization: 100%|██████████| 299/299 [00:02<00:00, 116.78it/s]Limb localization: 100%|██████████| 299/299 [00:02<00:00, 115.93it/s]
+
+Limb Localization Accuracy (conditioned on correct person): 89.22%
