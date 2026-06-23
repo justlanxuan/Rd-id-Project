@@ -1,0 +1,138 @@
+{
+  "overall": {
+    "Setting": [
+      "Full test (20 seq)",
+      "Train-only subset 1-window (16 seq)",
+      "Train-only subset 4-window vote (16 seq)"
+    ],
+    "4-IMU": [
+      0.955844924937491,
+      0.9561594386605513,
+      0.9632381058571029
+    ],
+    "1-IMU (R_LowArm)": [
+      0.7933748146945023,
+      0.8080208928630006,
+      0.8652609005668848
+    ],
+    "\u0394 (pp)": [
+      16.25,
+      14.81,
+      9.8
+    ]
+  },
+  "per_sequence": [
+    {
+      "sequence_id": "custom_01_011",
+      "four_imu_1window": 0.9184043517679057,
+      "four_imu_4window_vote": 0.9329102447869447,
+      "one_imu_1window": 0.4501359927470535,
+      "one_imu_4window_vote": 0.4084315503173164
+    },
+    {
+      "sequence_id": "custom_02_001",
+      "four_imu_1window": 0.9360047846889952,
+      "four_imu_4window_vote": 0.9539473684210527,
+      "one_imu_1window": 0.722488038277512,
+      "one_imu_4window_vote": 0.7422248803827751
+    },
+    {
+      "sequence_id": "custom_03_009",
+      "four_imu_1window": 0.9922057677318784,
+      "four_imu_4window_vote": 0.9922057677318784,
+      "one_imu_1window": 0.7724084177708496,
+      "one_imu_4window_vote": 0.8222915042868277
+    },
+    {
+      "sequence_id": "custom_04_011",
+      "four_imu_1window": 1.0,
+      "four_imu_4window_vote": 1.0,
+      "one_imu_1window": 0.8527536231884058,
+      "one_imu_4window_vote": 0.9710144927536232
+    },
+    {
+      "sequence_id": "custom_05_007",
+      "four_imu_1window": 0.9072033898305085,
+      "four_imu_4window_vote": 0.9648305084745763,
+      "one_imu_1window": 0.7300847457627119,
+      "one_imu_4window_vote": 0.8580508474576272
+    },
+    {
+      "sequence_id": "custom_06_006",
+      "four_imu_1window": 0.9226289517470881,
+      "four_imu_4window_vote": 0.9259567387687188,
+      "one_imu_1window": 0.6701331114808652,
+      "one_imu_4window_vote": 0.6925956738768719
+    },
+    {
+      "sequence_id": "custom_06_019",
+      "four_imu_1window": 0.9846014492753623,
+      "four_imu_4window_vote": 0.9846014492753623,
+      "one_imu_1window": 0.7889492753623188,
+      "one_imu_4window_vote": 0.917572463768116
+    },
+    {
+      "sequence_id": "custom_06_024",
+      "four_imu_1window": 0.9326347305389222,
+      "four_imu_4window_vote": 0.9326347305389222,
+      "one_imu_1window": 0.8053892215568862,
+      "one_imu_4window_vote": 0.8527944111776448
+    },
+    {
+      "sequence_id": "custom_06_025",
+      "four_imu_1window": 0.9632874426366291,
+      "four_imu_4window_vote": 0.9707968293700459,
+      "one_imu_1window": 0.8564872757613684,
+      "one_imu_4window_vote": 0.9290780141843972
+    },
+    {
+      "sequence_id": "custom_06_036",
+      "four_imu_1window": 0.9305324459234608,
+      "four_imu_4window_vote": 0.9442595673876872,
+      "one_imu_1window": 0.7945091514143094,
+      "one_imu_4window_vote": 0.872712146422629
+    },
+    {
+      "sequence_id": "custom_06_040",
+      "four_imu_1window": 0.9969230769230769,
+      "four_imu_4window_vote": 0.9969230769230769,
+      "one_imu_1window": 0.9476923076923077,
+      "one_imu_4window_vote": 0.9969230769230769
+    },
+    {
+      "sequence_id": "custom_06_041",
+      "four_imu_1window": 0.9676616915422885,
+      "four_imu_4window_vote": 0.9676616915422885,
+      "one_imu_1window": 0.9601990049751243,
+      "one_imu_4window_vote": 0.9676616915422885
+    },
+    {
+      "sequence_id": "custom_06_054",
+      "four_imu_1window": 0.9637096774193549,
+      "four_imu_4window_vote": 0.9637096774193549,
+      "one_imu_1window": 0.8245967741935484,
+      "one_imu_4window_vote": 0.9314516129032258
+    },
+    {
+      "sequence_id": "custom_06_060",
+      "four_imu_1window": 0.8853591160220995,
+      "four_imu_4window_vote": 0.8839779005524862,
+      "one_imu_1window": 0.835635359116022,
+      "one_imu_4window_vote": 0.8839779005524862
+    },
+    {
+      "sequence_id": "custom_07_007",
+      "four_imu_1window": 0.9987105093488072,
+      "four_imu_4window_vote": 0.9987105093488072,
+      "one_imu_1window": 0.988394584139265,
+      "one_imu_4window_vote": 0.9987105093488072
+    },
+    {
+      "sequence_id": "custom_07_011",
+      "four_imu_1window": 0.998683633172444,
+      "four_imu_4window_vote": 0.998683633172444,
+      "one_imu_1window": 0.9284774023694603,
+      "one_imu_4window_vote": 0.998683633172444
+    }
+  ]
+}
