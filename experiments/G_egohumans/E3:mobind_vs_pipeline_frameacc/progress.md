@@ -1,5 +1,14 @@
 # E3:mobind_vs_pipeline_frameacc 实时进度日志
 
+## 2026-06-23 18:00
+* 新增 A4：我们的 pipeline 使用 4 窗口聚合后重新评估 FrameAcc。
+* 结果更新：
+  * MoBInd mean FrameAcc = **0.9654**
+  * Our pipeline (1 window) = **0.9562**
+  * Our pipeline (4 windows) = **0.9576**
+* 4 窗口聚合后差距缩小到约 **0.78 pp**。
+* 更新 `results/results.md`、`results/figures/frameacc_comparison.png`。
+
 ## 2026-06-23 17:30
 * 完成 A1/A2/A3 全部实验。
 * **MoBInd** 在 16 个 train-only 序列上的 mean FrameAcc = **0.9654**。

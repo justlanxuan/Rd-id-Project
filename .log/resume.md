@@ -14,13 +14,15 @@
   * `experiments/G_egohumans/E3:mobind_vs_pipeline_frameacc/test/test.md`
   * `scripts/A1_eval_mobind_frameacc.py`
   * `scripts/A2_eval_ours_frameacc_subset.py`
+  * `scripts/A4_eval_ours_frameacc_4window.py`
   * `scripts/A3_compare_results.py`
   * `results/results.md`
   * `results/figures/frameacc_comparison.png`
 * 核心结果（16 个 train-only 序列）：
   * **MoBInd official stage2**: mean FrameAcc = **0.9654**
-  * **Our pipeline**: mean FrameAcc = **0.9562**
-  * 差距：MoBInd 领先 **+0.93 pp**
+  * **Our pipeline (1 window)**: mean FrameAcc = **0.9562**
+  * **Our pipeline (4 windows aggregated)**: mean FrameAcc = **0.9576**
+  * 差距：MoBInd 领先 1-window **+0.93 pp**，领先 4-window **+0.78 pp**
 * E2 基线仍保留：Retrieval R@1 ~83%，Localization Person 98.0% / Limb 89.2%，Sync Acc@0.2 ~99–100%。
 * MoBind 本地修改已保存为 patch：`third-party/mobind_egohumans_fixes.patch`。
 

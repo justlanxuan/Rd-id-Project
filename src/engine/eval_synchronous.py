@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imu_lowpass_cutoff_hz", type=float, default=None, help="FFT low-pass cutoff for IMU windows in Hz; set <= 0 to disable.")
     parser.add_argument("--imu_lowpass_fs_hz", type=float, default=30.0, help="Sampling rate used by the IMU low-pass filter.")
     parser.add_argument("--smooth_window", type=int, default=0, help="Temporal smoothing window size for frame assignments (0 = disabled)")
+    parser.add_argument("--group_windows", type=int, default=1, help="Aggregate this many consecutive windows into one matching decision (1 = disabled)")
     # Global motion options (must match training config)
     parser.add_argument("--use_global_motion", action="store_true")
     parser.add_argument("--global_motion_input_dim", type=int, default=2)
@@ -147,6 +148,7 @@ def evaluate_sequence(
     root_source: str = "auto",
     imu_lowpass_cutoff_hz: float | None = None,
     imu_lowpass_fs_hz: float = 30.0,
+    group_windows: int = 1,
 ) -> np.ndarray:
     """Run synchronous Hungarian matching on a full sequence.
 
@@ -225,24 +227,73 @@ def evaluate_sequence(
         z_vid_all = _batch_infer_embeddings(model.video_encoder, skel_windows, device, batch_size)
 
     # ------------------------------------------------------------------
-    # 3. Per-window Hungarian matching
+    # 3. Hungarian matching (per window or grouped windows)
     # ------------------------------------------------------------------
-    window_assignments: Dict[int, np.ndarray] = {}
-    for w_idx, (start, end, active_pred, imu_ids_for_win, skel_ids_for_win) in enumerate(window_meta):
-        if imu_ids_for_win is None or skel_ids_for_win is None:
-            continue
+    group_windows = max(1, group_windows)
+    centers: List[int] = []
+    center_assignments: List[np.ndarray] = []
 
-        z_imu = np.stack([z_imu_all[imu_index_map[(w_idx, i)]] for i in imu_ids_for_win], axis=0)
-        z_vid = np.stack([z_vid_all[skel_index_map[(w_idx, p)]] for p in skel_ids_for_win], axis=0)
+    if group_windows == 1:
+        for w_idx, (start, end, active_pred, imu_ids_for_win, skel_ids_for_win) in enumerate(window_meta):
+            if imu_ids_for_win is None or skel_ids_for_win is None:
+                continue
 
-        sim = np.dot(z_imu, z_vid.T)  # [N_active_imu, N_active_pred]
-        row_ind, col_ind = linear_sum_assignment(-sim)
+            z_imu = np.stack([z_imu_all[imu_index_map[(w_idx, i)]] for i in imu_ids_for_win], axis=0)
+            z_vid = np.stack([z_vid_all[skel_index_map[(w_idx, p)]] for p in skel_ids_for_win], axis=0)
 
-        center = (start + end) // 2
-        assignment = np.full(N_imu, -1, dtype=np.int64)
-        for r, c in zip(row_ind, col_ind):
-            assignment[imu_ids_for_win[r]] = skel_ids_for_win[c]
-        window_assignments[center] = assignment
+            sim = np.dot(z_imu, z_vid.T)  # [N_active_imu, N_active_pred]
+            row_ind, col_ind = linear_sum_assignment(-sim)
+
+            center = (start + end) // 2
+            assignment = np.full(N_imu, -1, dtype=np.int64)
+            for r, c in zip(row_ind, col_ind):
+                assignment[imu_ids_for_win[r]] = skel_ids_for_win[c]
+            centers.append(center)
+            center_assignments.append(assignment)
+    else:
+        num_w = len(window_meta)
+        for w in range(num_w - group_windows + 1):
+            # Union of active tracks across the group
+            active_group: set[int] = set()
+            for gw in range(w, w + group_windows):
+                _, _, active_pred, _, _ = window_meta[gw]
+                if active_pred is not None:
+                    active_group.update(active_pred.tolist())
+            if not active_group:
+                continue
+            active_group = sorted(active_group)
+
+            # Average IMU embeddings across the group
+            z_imu_list = []
+            for i in range(N_imu):
+                embs = [z_imu_all[imu_index_map[(gw, i)]]
+                        for gw in range(w, w + group_windows)
+                        if (gw, i) in imu_index_map]
+                z_imu_list.append(np.mean(embs, axis=0) if embs else np.zeros_like(z_imu_all[0]))
+            z_imu = np.stack(z_imu_list, axis=0)
+
+            # Average video embeddings for each active track (only over windows where it is active)
+            z_vid_list = []
+            for p in active_group:
+                embs = [z_vid_all[skel_index_map[(gw, p)]]
+                        for gw in range(w, w + group_windows)
+                        if (gw, p) in skel_index_map]
+                if embs:
+                    z_vid_list.append(np.mean(embs, axis=0))
+            if not z_vid_list:
+                continue
+            z_vid = np.stack(z_vid_list, axis=0)
+
+            sim = np.dot(z_imu, z_vid.T)
+            row_ind, col_ind = linear_sum_assignment(-sim)
+
+            start0 = window_meta[w][0]
+            center = start0 + (group_windows - 1) * stride // 2 + window_size // 2
+            assignment = np.full(N_imu, -1, dtype=np.int64)
+            for r, c in zip(row_ind, col_ind):
+                assignment[r] = active_group[c]
+            centers.append(center)
+            center_assignments.append(assignment)
 
     # ------------------------------------------------------------------
     # 4. Assign each frame to the nearest chunk center
@@ -252,7 +303,7 @@ def evaluate_sequence(
         for i in range(N_imu):
             best_dist = float("inf")
             best_pred = -1
-            for center, assign in window_assignments.items():
+            for center, assign in zip(centers, center_assignments):
                 dist = abs(t - center)
                 if dist < best_dist and assign[i] != -1:
                     best_dist = dist
@@ -482,7 +533,7 @@ def main() -> None:
 
         frame_assignments = evaluate_sequence(
             model, data, args.window_size, args.stride, device, args.batch_size, args.global_motion_root_source,
-            args.imu_lowpass_cutoff_hz, args.imu_lowpass_fs_hz
+            args.imu_lowpass_cutoff_hz, args.imu_lowpass_fs_hz, args.group_windows
         )
         
         if args.smooth_window > 0:
