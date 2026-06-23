@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_sequences", type=int, default=None, help="0 means all")
     parser.add_argument("--skeleton_source", type=str, default=None, choices=["vicon", "alphapose"], help="Skeleton data source")
     parser.add_argument("--skeleton_root", type=str, default=None, help="Root directory for AlphaPose skeleton data (if skeleton_source=alphapose)")
+    parser.add_argument("--multi_person", action="store_true", help="Treat IMU axis 1 as persons and only emit matched person_idx==imu_idx pairs.")
     return parser.parse_args()
 
 
@@ -65,6 +66,8 @@ def main() -> None:
         slice_cfg["skeleton_source"] = args.skeleton_source
     if args.skeleton_root is not None:
         slice_cfg["skeleton_root"] = args.skeleton_root
+    if args.multi_person:
+        slice_cfg["multi_person"] = True
 
     adapter = TotalCaptureAdapter(slice_cfg)
     adapter.run()

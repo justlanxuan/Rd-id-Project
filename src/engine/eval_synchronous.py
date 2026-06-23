@@ -15,6 +15,7 @@ from scipy.optimize import linear_sum_assignment
 from trackeval.metrics import HOTA
 
 from src.engine.common import build_alignment_model
+from src.datasets.alignment_dataset import lowpass_filter_fft
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +34,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--save_json", type=str, default="")
     parser.add_argument("--save_mot_pred", type=str, default="")
     parser.add_argument("--save_mot_gt", type=str, default="")
+    parser.add_argument("--imu_stats_json", type=str, default="")
+    parser.add_argument("--per_session_stats_dir", type=str, default="", help="Directory containing per-session imu_stats.json files (e.g., <session>_imu_stats.json)")
+    parser.add_argument("--imu_sensor", type=str, default="R_LowArm")
+    parser.add_argument("--repeat_single_sensor", type=int, default=4)
+    parser.add_argument("--imu_lowpass_cutoff_hz", type=float, default=None, help="FFT low-pass cutoff for IMU windows in Hz; set <= 0 to disable.")
+    parser.add_argument("--imu_lowpass_fs_hz", type=float, default=30.0, help="Sampling rate used by the IMU low-pass filter.")
+    parser.add_argument("--smooth_window", type=int, default=0, help="Temporal smoothing window size for frame assignments (0 = disabled)")
+    # Global motion options (must match training config)
+    parser.add_argument("--use_global_motion", action="store_true")
+    parser.add_argument("--global_motion_input_dim", type=int, default=2)
+    parser.add_argument("--global_motion_hidden_dim", type=int, default=64)
+    parser.add_argument("--global_motion_num_layers", type=int, default=2)
+    parser.add_argument("--global_motion_dropout", type=float, default=0.1)
+    parser.add_argument("--global_motion_input_type", type=str, default="diff_raw")
+    parser.add_argument("--global_motion_fusion_type", type=str, default="concat")
+    parser.add_argument("--global_motion_fusion_proj", action="store_true")
+    parser.add_argument("--global_motion_root_source", type=str, default="auto")
     return parser.parse_args()
 
 
@@ -64,7 +82,7 @@ def _extract_unique_sequences(rows: List[Dict[str, str]], root_dir: Path) -> Lis
     return seqs
 
 
-def _batch_infer_embeddings(encoder, windows: List[np.ndarray], device: torch.device, batch_size: int = 64) -> np.ndarray:
+def _batch_infer_embeddings(encoder, windows: List[np.ndarray], device: torch.device, batch_size: int = 64, root_windows: List[np.ndarray] | None = None) -> np.ndarray:
     """Run encoder on a list of window tensors and return embeddings."""
     if not windows:
         return np.zeros((0,), dtype=np.float32)
@@ -72,9 +90,51 @@ def _batch_infer_embeddings(encoder, windows: List[np.ndarray], device: torch.de
     for i in range(0, len(windows), batch_size):
         batch = torch.from_numpy(np.stack(windows[i : i + batch_size], axis=0)).to(device)
         with torch.no_grad():
-            emb = encoder(batch).cpu().numpy()
+            if root_windows is not None:
+                root_batch = torch.from_numpy(np.stack(root_windows[i : i + batch_size], axis=0)).to(device)
+                emb = encoder(batch, root_batch).cpu().numpy()
+            else:
+                emb = encoder(batch).cpu().numpy()
         all_emb.append(emb)
     return np.concatenate(all_emb, axis=0)
+
+
+def _build_root_traj(
+    data: Dict[str, np.ndarray],
+    start: int,
+    end: int,
+    person_idx: int,
+    root_source: str,
+) -> np.ndarray:
+    """Build global trajectory features for one person/window."""
+    src = (root_source or "auto").lower()
+
+    if src in ("root_3d", "auto") and "gt_skeleton_meters" in data:
+        skel = data["gt_skeleton_meters"][start:end, person_idx]
+        if skel.ndim == 3 and skel.shape[-1] >= 3:
+            return skel[:, 0, :3].astype(np.float32)
+
+    if "extract_bboxes" not in data:
+        raise ValueError("extract_bboxes not found in data for global trajectory extraction")
+
+    bboxes = data["extract_bboxes"][start:end, person_idx]
+    cx = (bboxes[:, 0] + bboxes[:, 2]) / 2.0
+    cy = (bboxes[:, 1] + bboxes[:, 3]) / 2.0
+
+    if src in ("bbox_full", "full"):
+        w = bboxes[:, 2] - bboxes[:, 0]
+        h = bboxes[:, 3] - bboxes[:, 1]
+        return np.stack([cx, cy, w, h], axis=-1).astype(np.float32)
+
+    if src in ("bbox_vel", "vel"):
+        vx = np.zeros_like(cx)
+        vy = np.zeros_like(cy)
+        vx[1:] = cx[1:] - cx[:-1]
+        vy[1:] = cy[1:] - cy[:-1]
+        return np.stack([cx, cy, vx, vy], axis=-1).astype(np.float32)
+
+    # default: bbox_center / auto fallback
+    return np.stack([cx, cy], axis=-1).astype(np.float32)
 
 
 def evaluate_sequence(
@@ -84,6 +144,9 @@ def evaluate_sequence(
     stride: int,
     device: torch.device,
     batch_size: int = 64,
+    root_source: str = "auto",
+    imu_lowpass_cutoff_hz: float | None = None,
+    imu_lowpass_fs_hz: float = 30.0,
 ) -> np.ndarray:
     """Run synchronous Hungarian matching on a full sequence.
 
@@ -125,7 +188,10 @@ def evaluate_sequence(
 
         for i in range(N_imu):
             imu_index_map[(w_idx, i)] = len(imu_windows)
-            imu_windows.append(data["imu"][start:end, i].astype(np.float32))
+            imu_window = data["imu"][start:end, i].astype(np.float32)
+            if imu_lowpass_cutoff_hz is not None and imu_lowpass_cutoff_hz > 0:
+                imu_window = lowpass_filter_fft(imu_window, imu_lowpass_cutoff_hz, imu_lowpass_fs_hz)
+            imu_windows.append(imu_window)
             imu_ids_for_win.append(i)
 
         for p in active_pred:
@@ -140,7 +206,23 @@ def evaluate_sequence(
     # ------------------------------------------------------------------
     model.eval()
     z_imu_all = _batch_infer_embeddings(model.imu_encoder, imu_windows, device, batch_size)
-    z_vid_all = _batch_infer_embeddings(model.video_encoder, skel_windows, device, batch_size)
+    
+    # Check if video encoder supports global motion (has local_encoder attr)
+    use_global = hasattr(model.video_encoder, 'local_encoder')
+    if use_global:
+        # Extract root trajectory features for each skeleton window
+        skel_root_windows: List[np.ndarray] = []
+        root_index_map: Dict[Tuple[int, int], int] = {}
+        for w_idx, (start, end, active_pred, imu_ids_for_win, skel_ids_for_win) in enumerate(window_meta):
+            if skel_ids_for_win is None:
+                continue
+            for p in skel_ids_for_win:
+                root_index_map[(w_idx, int(p))] = len(skel_root_windows)
+                root_traj = _build_root_traj(data, start, end, int(p), root_source)
+                skel_root_windows.append(root_traj)
+        z_vid_all = _batch_infer_embeddings(model.video_encoder, skel_windows, device, batch_size, skel_root_windows)
+    else:
+        z_vid_all = _batch_infer_embeddings(model.video_encoder, skel_windows, device, batch_size)
 
     # ------------------------------------------------------------------
     # 3. Per-window Hungarian matching
@@ -178,6 +260,38 @@ def evaluate_sequence(
             frame_assignments[t, i] = best_pred
 
     return frame_assignments
+
+
+def smooth_frame_assignments(frame_assignments: np.ndarray, window: int = 5) -> np.ndarray:
+    """Apply sliding-window majority vote smoothing per IMU.
+    
+    Args:
+        frame_assignments: [T, N_imu] array
+        window: smoothing window size (must be odd)
+    
+    Returns:
+        smoothed [T, N_imu] array
+    """
+    if window <= 1:
+        return frame_assignments
+    T, N_imu = frame_assignments.shape
+    smoothed = frame_assignments.copy()
+    half = window // 2
+    
+    for i in range(N_imu):
+        for t in range(T):
+            start = max(0, t - half)
+            end = min(T, t + half + 1)
+            vals = frame_assignments[start:end, i]
+            valid = vals[vals != -1]
+            if len(valid) > 0:
+                # Majority vote
+                from collections import Counter
+                c = Counter(valid)
+                smoothed[t, i] = c.most_common(1)[0][0]
+            else:
+                smoothed[t, i] = -1
+    return smoothed
 
 
 def build_hota_data(
@@ -330,6 +444,25 @@ def main() -> None:
     metric = HOTA()
     all_results = []
 
+    imu_mean = None
+    imu_std = None
+    if args.imu_stats_json:
+        stats = json.loads(Path(args.imu_stats_json).read_text())
+        imu_mean = np.asarray(stats["imu_mean"], dtype=np.float32)
+        imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
+
+    per_session_stats = {}
+    if args.per_session_stats_dir:
+        psd = Path(args.per_session_stats_dir)
+        for p in psd.glob("*_imu_stats.json"):
+            session_id = p.stem.replace("_imu_stats", "")
+            stats = json.loads(p.read_text())
+            per_session_stats[session_id] = (
+                np.asarray(stats["imu_mean"], dtype=np.float32),
+                np.asarray(stats["imu_std"], dtype=np.float32),
+            )
+        print(f"[INFO] Loaded per-session stats for {len(per_session_stats)} sessions: {sorted(per_session_stats.keys())}")
+
     for seq_id, npz_path in sequences:
         data = {k: v for k, v in np.load(npz_path, allow_pickle=True).items()}
         print(f"Evaluating {seq_id} ...")
@@ -338,9 +471,22 @@ def main() -> None:
             print(f"  Skipping: no extracted skeletons.")
             continue
 
+        # Apply IMU normalization: per-session takes precedence over global
+        session_key = seq_id.replace("custom_", "")
+        if session_key in per_session_stats:
+            sess_mean, sess_std = per_session_stats[session_key]
+            data["imu"] = (data["imu"] - sess_mean) / np.maximum(sess_std, 1e-6)
+            print(f"  [Per-session norm] Using stats for session {session_key}")
+        elif imu_mean is not None and imu_std is not None:
+            data["imu"] = (data["imu"] - imu_mean) / np.maximum(imu_std, 1e-6)
+
         frame_assignments = evaluate_sequence(
-            model, data, args.window_size, args.stride, device, args.batch_size
+            model, data, args.window_size, args.stride, device, args.batch_size, args.global_motion_root_source,
+            args.imu_lowpass_cutoff_hz, args.imu_lowpass_fs_hz
         )
+        
+        if args.smooth_window > 0:
+            frame_assignments = smooth_frame_assignments(frame_assignments, window=args.smooth_window)
 
         hota_data = build_hota_data(data, frame_assignments)
         res = metric.eval_sequence(hota_data)

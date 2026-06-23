@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import warnings
 from pathlib import Path
 from typing import List, Tuple
 
@@ -15,6 +16,41 @@ from src.datasets.totalcapture import quat_to_rotmat
 from src.utils.config import load_config
 
 
+
+
+def lowpass_filter_fft(signal: np.ndarray, cutoff_hz: float | None, fs_hz: float) -> np.ndarray:
+    """Apply FFT-domain low-pass filter along time axis [axis 0].
+    
+    Args:
+        signal: [T, ...] array with time on axis 0
+        cutoff_hz: Cutoff frequency in Hz (None to skip filtering)
+        fs_hz: Sampling frequency in Hz
+    
+    Returns:
+        Filtered signal with same shape as input
+    """
+    if cutoff_hz is None or cutoff_hz <= 0:
+        return signal.astype(np.float32, copy=False)
+    
+    time_len = signal.shape[0]
+    nyquist = fs_hz / 2.0
+    effective_cutoff = float(cutoff_hz)
+    
+    # Safety clip to Nyquist
+    if effective_cutoff >= nyquist:
+        warnings.warn(
+            f"Requested IMU low-pass cutoff {effective_cutoff:.3f} Hz exceeds Nyquist {nyquist:.3f} Hz; "
+            f"clipping to {nyquist * 0.95:.3f} Hz.",
+            RuntimeWarning
+        )
+        effective_cutoff = max(nyquist * 0.95, 1e-6)
+    
+    # FFT-domain filtering
+    freq = np.fft.rfftfreq(time_len, d=1.0 / fs_hz)
+    spectrum = np.fft.rfft(signal, axis=0)
+    spectrum[freq > effective_cutoff, ...] = 0.0
+    return np.fft.irfft(spectrum, n=time_len, axis=0).astype(np.float32)
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Custom dataset preprocess")
     parser.add_argument("--config", type=str, default=None, help="YAML config path")
@@ -22,6 +58,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--manifest_csv", type=str, default=None)
     return parser.parse_args()
+
+
+def load_imu_person_mapping(annotations_dir: Path) -> dict[str, str] | None:
+    """Load IMU-to-person mapping from annotations/imu_person_mapping.json.
+
+    Expected format:
+        {"person1": "f8:a2:fd:ea:fb:80", "person2": "da:19:a9:ac:6d:fe"}
+
+    Returns None if the mapping file does not exist.
+    """
+    mapping_path = annotations_dir / "imu_person_mapping.json"
+    if not mapping_path.exists():
+        return None
+    with mapping_path.open("r", encoding="utf-8") as f:
+        mapping = json.load(f)
+    if not isinstance(mapping, dict):
+        raise ValueError(f"Invalid IMU person mapping format in {mapping_path}")
+    return mapping
 
 
 def load_preprocess_cfg(config_path: str | None) -> dict:
@@ -89,6 +143,93 @@ def _find_col(candidates: List[str], row: dict) -> str:
     raise KeyError(f"Could not find any of {candidates}. Available: {list(row.keys())}")
 
 
+def _interpolate_sparse_bboxes(
+    frame_indices: np.ndarray,
+    bboxes: np.ndarray,
+    visibility: np.ndarray,
+    n_video_frames: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Interpolate bboxes for frames between first and last valid annotation.
+
+    For each person, finds the first and last frames where visibility=True.
+    Within this range, missing frames get linearly interpolated bboxes.
+    Frames outside any person's valid range are marked invisible and excluded.
+
+    Args:
+        frame_indices: [T_anno] annotated frame indices
+        bboxes: [T_anno, N, 4]
+        visibility: [T_anno, N] bool
+        n_video_frames: total video frames
+
+    Returns:
+        out_bboxes: [T_out, N, 4]
+        out_visibility: [T_out, N] bool
+        out_frame_ids: [T_out] frame indices (0-based) in output range
+    """
+    n_persons = bboxes.shape[1]
+    per_person: list[dict] = []
+
+    for p in range(n_persons):
+        valid_mask = visibility[:, p]
+        valid_frames = frame_indices[valid_mask]
+        if len(valid_frames) == 0:
+            raise ValueError(f"Person {p} has no valid annotations")
+        per_person.append({
+            "first": int(valid_frames[0]),
+            "last": int(valid_frames[-1]),
+            "valid_frames": valid_frames,
+            "valid_bboxes": bboxes[valid_mask, p],
+        })
+
+    # Global output range: from min first_valid to max last_valid
+    output_start = max(0, min(v["first"] for v in per_person))
+    output_end = min(n_video_frames - 1, max(v["last"] for v in per_person))
+    if output_start > output_end:
+        raise ValueError("Invalid output range: start > end")
+
+    T_out = output_end - output_start + 1
+    out_frame_ids = np.arange(output_start, output_end + 1, dtype=np.int64)
+    out_bboxes = np.zeros((T_out, n_persons, 4), dtype=np.float32)
+    out_visibility = np.zeros((T_out, n_persons), dtype=bool)
+
+    for p in range(n_persons):
+        pv = per_person[p]
+        first_v = pv["first"]
+        last_v = pv["last"]
+        valid_frames = pv["valid_frames"]
+        valid_bboxes = pv["valid_bboxes"]
+
+        # Build frame->bbox lookup for original annotations
+        frame_to_bbox: dict[int, np.ndarray] = {}
+        for i, f in enumerate(frame_indices):
+            if visibility[i, p]:
+                frame_to_bbox[int(f)] = bboxes[i, p].copy()
+
+        for idx, f in enumerate(out_frame_ids):
+            f = int(f)
+            if f in frame_to_bbox:
+                out_bboxes[idx, p] = frame_to_bbox[f]
+                out_visibility[idx, p] = True
+            elif first_v <= f <= last_v:
+                # Linearly interpolate between nearest valid frames
+                pos = int(np.searchsorted(valid_frames, f))
+                if pos == 0:
+                    out_bboxes[idx, p] = valid_bboxes[0]
+                elif pos >= len(valid_frames):
+                    out_bboxes[idx, p] = valid_bboxes[-1]
+                else:
+                    f_high = int(valid_frames[pos])
+                    f_low = int(valid_frames[pos - 1])
+                    alpha = (f - f_low) / (f_high - f_low) if f_high != f_low else 0.0
+                    out_bboxes[idx, p] = valid_bboxes[pos - 1] + alpha * (
+                        valid_bboxes[pos] - valid_bboxes[pos - 1]
+                    )
+                out_visibility[idx, p] = True
+            # else: remains zero bbox, visibility=False
+
+    return out_bboxes, out_visibility, out_frame_ids
+
+
 def parse_imu_csv(imu_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Parse custom IMU CSV.
 
@@ -121,7 +262,8 @@ def parse_imu_csv(imu_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     for t, row in enumerate(rows):
         timestamps_ms[t] = float(row[ts_col])
         quat4[t] = np.array([float(row[q0_col]), float(row[q1_col]), float(row[q2_col]), float(row[q3_col])], dtype=np.float32)
-        acc3[t] = np.array([float(row[ax_col]), float(row[ay_col]), float(row[az_col])], dtype=np.float32)
+        # Convert acceleration from g to m/s² to match TotalCapture units
+        acc3[t] = np.array([float(row[ax_col]), float(row[ay_col]), float(row[az_col])], dtype=np.float32) * 9.80665
 
     return timestamps_ms, quat4, acc3
 
@@ -165,6 +307,25 @@ def get_video_fps(video_path: Path) -> float:
 def main() -> None:
     args = parse_args()
     preprocess_cfg = load_preprocess_cfg(args.config)
+    
+    # Get IMU filter parameters from config (applied before downsampling)
+    imu_cfg = preprocess_cfg.get("imu", {})
+
+    def _parse_float_or_none(x):
+        if x is None:
+            return None
+        if isinstance(x, str):
+            xs = x.strip()
+            if xs.lower() in ("none", "null", ""):
+                return None
+            try:
+                return float(xs)
+            except ValueError:
+                raise ValueError(f"Invalid numeric value for IMU config: {x}")
+        return float(x)
+
+    imu_lowpass_cutoff_hz = _parse_float_or_none(imu_cfg.get("lowpass_cutoff_hz", None))
+    imu_lowpass_fs_hz = _parse_float_or_none(imu_cfg.get("lowpass_fs_hz", 100.0))  # Default: 100Hz raw IMU
 
     raw_root = Path(args.raw_root if args.raw_root else preprocess_cfg.get("raw_root", "/data/fzliang/custom")).expanduser().resolve()
 
@@ -183,21 +344,44 @@ def main() -> None:
 
     manifest_rows: list[dict[str, str]] = []
 
-    for person_count_dir in sorted(raw_root.iterdir()):
-        if not person_count_dir.is_dir():
-            continue
-        for session_dir in sorted(person_count_dir.iterdir()):
+    def collect_sessions(base_dir: Path, annotations_dir: Path, prefix: str = "custom"):
+        """Collect all session directories under base_dir."""
+        for session_dir in sorted(base_dir.iterdir()):
             if not session_dir.is_dir():
                 continue
-            # Skip metadata folders like "annotations"
             if not (session_dir / "video").exists():
                 continue
-
             session_stem = session_dir.name
-            sequence_id = f"custom_{session_stem}"
+            sequence_id = f"{prefix}_{session_stem}"
             video_path = session_dir / "video" / f"{session_stem}.mp4"
-            anno_path = person_count_dir / "annotations" / f"{session_stem}.anno.csv"
+            anno_path = annotations_dir / f"{session_stem}.anno.csv"
             imu_dir = session_dir / "imu"
+            yield session_stem, sequence_id, video_path, anno_path, imu_dir, annotations_dir
+
+    # Determine directory layout
+    # Layout A: raw_root/<person_count>/<session>/  (old)
+    # Layout B: raw_root/<session>/  (new, e.g. batch_20260505)
+    has_person_count_subdirs = any(
+        d.is_dir() and (d / "annotations").exists()
+        for d in raw_root.iterdir()
+    )
+
+    if has_person_count_subdirs:
+        # Old layout: iterate over person_count subdirs
+        sessions_iter = []
+        for person_count_dir in sorted(raw_root.iterdir()):
+            if not person_count_dir.is_dir():
+                continue
+            if not (person_count_dir / "annotations").exists():
+                continue
+            sessions_iter.extend(
+                collect_sessions(person_count_dir, person_count_dir / "annotations", prefix="custom")
+            )
+    else:
+        # New layout: sessions directly under raw_root
+        sessions_iter = list(collect_sessions(raw_root, raw_root / "annotations", prefix="custom"))
+
+    for session_stem, sequence_id, video_path, anno_path, imu_dir, annotations_dir in sessions_iter:
 
             if not video_path.exists():
                 print(f"Warning: video not found for {sequence_id}, skipping")
@@ -215,29 +399,98 @@ def main() -> None:
             if len(imu_files) != n_persons:
                 print(f"Warning: IMU count ({len(imu_files)}) != person count ({n_persons}) for {sequence_id}")
 
+            # Load IMU-to-person mapping if available
+            mapping = load_imu_person_mapping(annotations_dir)
+            if mapping is not None:
+                ordered_files: list[Path | None] = [None] * n_persons
+                used_indices: set[int] = set()
+                for person_key, mac_addr in mapping.items():
+                    if not person_key.startswith("person"):
+                        continue
+                    try:
+                        person_idx = int(person_key.replace("person", "")) - 1
+                    except ValueError:
+                        continue
+                    if not (0 <= person_idx < n_persons):
+                        continue
+                    # Find IMU file whose stem contains the MAC address
+                    for fpath in imu_files:
+                        if mac_addr in fpath.name and fpath not in [ordered_files[i] for i in used_indices if ordered_files[i] is not None]:
+                            ordered_files[person_idx] = fpath
+                            used_indices.add(person_idx)
+                            break
+                # Fill remaining slots with unused files (alphabetical order)
+                unused_files = [f for f in imu_files if f not in ordered_files]
+                for i in range(n_persons):
+                    if ordered_files[i] is None and unused_files:
+                        ordered_files[i] = unused_files.pop(0)
+                imu_files = [f for f in ordered_files if f is not None]
+                if len(imu_files) != n_persons:
+                    print(f"Warning: could not resolve full IMU mapping for {sequence_id}, using partial")
+
             imu_data_list = []
             for imu_path in imu_files:
                 imu_ts, quat4, acc3 = parse_imu_csv(imu_path)
                 imu48 = convert_single_imu_to_48(quat4, acc3)
+                # Apply FFT low-pass filter before resampling (at 100Hz raw rate)
+                if imu_lowpass_cutoff_hz is not None:
+                    imu48 = lowpass_filter_fft(imu48, imu_lowpass_cutoff_hz, imu_lowpass_fs_hz)
                 imu_data_list.append((imu_ts, imu48))
 
             valid_start_ms = max(data[0][0] for data in imu_data_list)
             valid_end_ms = min(data[0][-1] for data in imu_data_list)
 
-            crop_mask = (anno_ts >= valid_start_ms) & (anno_ts <= valid_end_ms)
-            if not crop_mask.any():
-                print(f"Warning: no overlap between IMU and annotation for {sequence_id}, skipping")
-                continue
+            # Determine output frame coverage
+            # For sparse annotations (fewer rows than video frames), expand to all video frames
+            cap = cv2.VideoCapture(str(video_path))
+            n_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) if cap.get(cv2.CAP_PROP_FPS) > 0 else 30.0
+            cap.release()
 
-            crop_indices = np.where(crop_mask)[0]
-            first_idx = int(crop_indices[0])
-            last_idx = int(crop_indices[-1])
+            sparse_annotation = len(anno_ts) < n_video_frames * 0.8
+            if sparse_annotation and n_video_frames > 0:
+                # Interpolate bboxes between first and last valid annotations per person
+                # Frames outside any person's valid range are excluded
+                try:
+                    anno_bboxes, anno_visibility, frame_ids = _interpolate_sparse_bboxes(
+                        frame_indices, anno_bboxes, anno_visibility, n_video_frames
+                    )
+                except ValueError as e:
+                    print(f"Warning: failed to interpolate annotations for {sequence_id}: {e}, skipping")
+                    continue
 
-            target_ts = anno_ts[first_idx : last_idx + 1]
-            T = len(target_ts)
-            frame_ids = np.arange(T, dtype=np.int64)
-            bboxes = anno_bboxes[first_idx : last_idx + 1]
-            visibility = anno_visibility[first_idx : last_idx + 1]
+                T = len(frame_ids)
+                if T == 0:
+                    print(f"Warning: no valid frames after interpolation for {sequence_id}, skipping")
+                    continue
+
+                # Compute video start time from annotation frame_index vs timestamp_ms
+                if len(frame_indices) >= 2:
+                    frame_interval_ms = 1000.0 / fps
+                    offsets = anno_ts - frame_indices * frame_interval_ms
+                    video_start_ms = float(np.median(offsets))
+                elif len(frame_indices) == 1:
+                    video_start_ms = float(anno_ts[0] - frame_indices[0] * (1000.0 / fps))
+                else:
+                    video_start_ms = float(anno_ts[0])
+
+                target_ts = video_start_ms + frame_ids.astype(np.float64) * (1000.0 / fps)
+            else:
+                # Dense annotation mode: use annotation timestamps directly (legacy behavior)
+                crop_mask = (anno_ts >= valid_start_ms) & (anno_ts <= valid_end_ms)
+                if not crop_mask.any():
+                    print(f"Warning: no overlap between IMU and annotation for {sequence_id}, skipping")
+                    continue
+
+                crop_indices = np.where(crop_mask)[0]
+                first_idx = int(crop_indices[0])
+                last_idx = int(crop_indices[-1])
+
+                target_ts = anno_ts[first_idx : last_idx + 1]
+                T = len(target_ts)
+                frame_ids = np.arange(T, dtype=np.int64)
+                bboxes = anno_bboxes[first_idx : last_idx + 1]
+                visibility = anno_visibility[first_idx : last_idx + 1]
 
             n_imu = len(imu_data_list)
             imu_out = np.zeros((T, n_imu, 48), dtype=np.float32)
@@ -252,6 +505,13 @@ def main() -> None:
             person_ids = np.arange(n_persons, dtype=np.int64)
             imu_ids = np.arange(n_imu, dtype=np.int64)
 
+            # Build MAC-to-person map for storage (derived from file ordering)
+            imu_person_map: dict[str, int] = {}
+            for i, fpath in enumerate(imu_files):
+                # Extract MAC from filename: {stem}_{mac}.csv
+                mac = fpath.stem.split("_")[-1] if "_" in fpath.stem else fpath.stem
+                imu_person_map[mac] = int(person_ids[i])
+
             npz_path = seq_dir / f"{sequence_id}.npz"
             np.savez_compressed(
                 npz_path,
@@ -262,8 +522,9 @@ def main() -> None:
                 imu=imu_out,
                 imu_ids=imu_ids,
                 gt_person_ids=person_ids,
-                gt_bboxes=bboxes,
-                gt_visibility=visibility,
+                gt_bboxes=anno_bboxes,
+                gt_visibility=anno_visibility,
+                imu_person_map=np.array(json.dumps(imu_person_map), dtype=object),
             )
 
             meta = {
@@ -277,6 +538,7 @@ def main() -> None:
                 "imu_ids": imu_ids.tolist(),
                 "gt_person_ids": person_ids.tolist(),
                 "extract_person_ids": [],
+                "imu_person_map": imu_person_map,
             }
             (seq_dir / f"{sequence_id}.json").write_text(json.dumps(meta, indent=2))
 

@@ -39,6 +39,19 @@ def parse_sensor_order(spec: Sequence[str] | str | None) -> List[str]:
     return [str(x).strip() for x in spec if str(x).strip()]
 
 
+def parse_bool(spec, default: bool = True) -> bool:
+    if spec is None:
+        return default
+    if isinstance(spec, bool):
+        return spec
+    s = str(spec).strip().lower()
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 def quat_to_rotmat(q: np.ndarray) -> np.ndarray:
     # q: [N, 4], in order [w, x, y, z]
     w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
@@ -232,6 +245,7 @@ def _align_extract_to_npz(
     data: dict[str, np.ndarray],
     alphapose_frames: dict[int, list[dict]],
     track_ids: list[int],
+    normalize_extract_skeleton: bool = True,
 ) -> dict[str, np.ndarray]:
     """Align AlphaPose multi-person output into NPZ.
 
@@ -264,10 +278,11 @@ def _align_extract_to_npz(
                 extract_skeleton[t, p_idx] = det["keypoints"]
                 extract_visibility[t, p_idx] = True
 
-    # Normalize each extracted track independently (same as GT skeleton preprocessing)
-    for p in range(N_pred):
-        if extract_visibility[:, p].any():
-            extract_skeleton[:, p] = normalize_skeleton(extract_skeleton[:, p])
+    # Normalize each extracted track independently (same as GT skeleton preprocessing).
+    if normalize_extract_skeleton:
+        for p in range(N_pred):
+            if extract_visibility[:, p].any():
+                extract_skeleton[:, p] = normalize_skeleton(extract_skeleton[:, p])
 
     gt_to_extract_map = np.full((T, N_gt), -1, dtype=np.int64)
     gt_bboxes = data["gt_bboxes"]
@@ -316,10 +331,12 @@ class TotalCaptureAdapter:
         self.val_sessions = parse_subjects(slice_cfg.get("val_sessions", ""))
         self.test_sessions = parse_subjects(slice_cfg.get("test_sessions", ""))
         self.max_sequences = int(slice_cfg.get("max_sequences", 0))
+        self.skeleton_normalize = parse_bool(slice_cfg.get("skeleton_normalize", True), default=True)
         self.skeleton_source = slice_cfg.get("skeleton_source", "vicon")
         self.skeleton_root = None
         if self.skeleton_source == "alphapose":
             self.skeleton_root = Path(slice_cfg.get("skeleton_root", "/home/fzliang/MotionBERT/results_totalcapture_video"))
+        self.multi_person = parse_bool(slice_cfg.get("multi_person"), default=False)
 
     def run(self) -> Path:
         return self._run_slice()
@@ -382,7 +399,12 @@ class TotalCaptureAdapter:
                     skeleton_json = extract_dir / "skeleton.json"
                     if skeleton_json.exists():
                         alphapose_frames, track_ids = load_alphapose_multiperson(skeleton_json)
-                        data = _align_extract_to_npz(data, alphapose_frames, track_ids)
+                        data = _align_extract_to_npz(
+                            data,
+                            alphapose_frames,
+                            track_ids,
+                            normalize_extract_skeleton=self.skeleton_normalize,
+                        )
                         data["extract_source"] = str(skeleton_json)
                     else:
                         print(f"Warning: skeleton.json not found in {extract_dir} for {sequence_id}")
@@ -421,11 +443,16 @@ class TotalCaptureAdapter:
                         else:
                             skeleton_source = train_skeleton_source
 
-                        for person_idx in range(max(n_gt, 1)):
-                            for imu_idx in range(n_imu):
+                        if self.multi_person:
+                            # EgoHumans-style: imu axis 1 corresponds to persons.
+                            # Emit only matched IMU-person pairs.
+                            for person_idx in range(max(n_gt, 1)):
+                                imu_idx = person_idx
+                                if imu_idx >= n_imu:
+                                    continue
                                 window_rows.append(
                                     {
-                                        "subject": subject,
+                                        "subject": f"{subject}_P{person_idx}" if subject != "all" else f"P{person_idx}",
                                         "session": session,
                                         "split": split,
                                         "npz_path": str(rel_npz),
@@ -437,6 +464,23 @@ class TotalCaptureAdapter:
                                         "imu_idx": imu_idx,
                                     }
                                 )
+                        else:
+                            for person_idx in range(max(n_gt, 1)):
+                                for imu_idx in range(n_imu):
+                                    window_rows.append(
+                                        {
+                                            "subject": subject,
+                                            "session": session,
+                                            "split": split,
+                                            "npz_path": str(rel_npz),
+                                            "window_start": int(st),
+                                            "window_end": int(ed),
+                                            "window_len": int(self.window_len),
+                                            "skeleton_source": skeleton_source,
+                                            "person_idx": person_idx,
+                                            "imu_idx": imu_idx,
+                                        }
+                                    )
 
         write_csv(
             self.out_dir / "sequences.csv",

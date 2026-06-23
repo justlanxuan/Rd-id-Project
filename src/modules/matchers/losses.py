@@ -35,12 +35,20 @@ class SymmetricInfoNCE(nn.Module):
                 torch.tensor(float(temperature), dtype=torch.float32),
             )
 
-    def forward(self, z_a: torch.Tensor, z_b: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        z_a: torch.Tensor,
+        z_b: torch.Tensor,
+        labels_a: torch.Tensor | None = None,
+        labels_b: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """Compute symmetric InfoNCE loss.
         
         Args:
             z_a: Embeddings from modality A [B, D]
             z_b: Embeddings from modality B [B, D]
+            labels_a: Optional labels for z_a -> z_b direction. If None, uses diagonal.
+            labels_b: Optional labels for z_b -> z_a direction. If None, uses diagonal.
             
         Returns:
             Scalar loss value
@@ -55,14 +63,23 @@ class SymmetricInfoNCE(nn.Module):
 
         t = torch.clamp(self.temperature, min=1e-6)
         logits = torch.matmul(z_a, z_b.t()) / t
-        labels = torch.arange(logits.shape[0], device=logits.device)
 
-        loss_ab = F.cross_entropy(logits, labels)
-        loss_ba = F.cross_entropy(logits.t(), labels)
+        if labels_a is None:
+            labels_a = torch.arange(logits.shape[0], device=logits.device)
+        if labels_b is None:
+            labels_b = torch.arange(logits.shape[1], device=logits.device)
+
+        loss_ab = F.cross_entropy(logits, labels_a)
+        loss_ba = F.cross_entropy(logits.t(), labels_b)
         return 0.5 * (loss_ab + loss_ba)
 
 
-def retrieval_top1(z_a: torch.Tensor, z_b: torch.Tensor) -> float:
+def retrieval_top1(
+    z_a: torch.Tensor,
+    z_b: torch.Tensor,
+    labels_a: torch.Tensor | None = None,
+    labels_b: torch.Tensor | None = None,
+) -> float:
     """Top-1 paired retrieval accuracy over a batch.
     
     Computes the accuracy of retrieving the correct paired sample
@@ -71,6 +88,8 @@ def retrieval_top1(z_a: torch.Tensor, z_b: torch.Tensor) -> float:
     Args:
         z_a: Embeddings from modality A [B, D]
         z_b: Embeddings from modality B [B, D]
+        labels_a: Optional labels for z_a -> z_b direction. If None, uses diagonal.
+        labels_b: Optional labels for z_b -> z_a direction. If None, uses diagonal.
         
     Returns:
         Top-1 retrieval accuracy (0.0 - 1.0)
@@ -78,7 +97,12 @@ def retrieval_top1(z_a: torch.Tensor, z_b: torch.Tensor) -> float:
     z_a = F.normalize(z_a, dim=-1)
     z_b = F.normalize(z_b, dim=-1)
     sims = torch.matmul(z_a, z_b.t())
-    labels = torch.arange(sims.shape[0], device=sims.device)
-    acc_ab = (sims.argmax(dim=1) == labels).float().mean()
-    acc_ba = (sims.argmax(dim=0) == labels).float().mean()
+
+    if labels_a is None:
+        labels_a = torch.arange(sims.shape[0], device=sims.device)
+    if labels_b is None:
+        labels_b = torch.arange(sims.shape[1], device=sims.device)
+
+    acc_ab = (sims.argmax(dim=1) == labels_a).float().mean()
+    acc_ba = (sims.argmax(dim=0) == labels_b).float().mean()
     return float((0.5 * (acc_ab + acc_ba)).item())

@@ -72,17 +72,19 @@ The unified pipeline supports five stages: `preprocess` (raw data alignment), `e
 
 ```bash
 # Run everything
-./run.sh configs/totalcapture_video_test.yaml all
+./run.sh configs/totalcapture_vicon.yaml all
 
 # Or run individual stages
 ./run.sh configs/totalcapture_video_test.yaml preprocess   # raw ->  NPZ + video manifest
 ./run.sh configs/totalcapture_video_test.yaml extract      # video -> skeleton (for video workflows)
-./run.sh configs/totalcapture_video_test.yaml slice        # align extract -> windowed NPZ + csv
-./run.sh configs/totalcapture_video_test.yaml train        # train matcher
-./run.sh configs/totalcapture_video_test.yaml test         # evaluate matcher
+./run.sh configs/totalcapture_video.yaml slice        # align extract -> windowed NPZ + csv
+./run.sh configs/totalcapture_video.yaml train        # train matcher
+./run.sh configs/totalcapture_video.yaml test         # evaluate matcher
 ```
 
 > **Note:** The default stage order for `all` is `preprocess -> extract -> slice -> train -> test`. `extract` is automatically skipped if no `extract` section is present in the config.
+
+> **IMU filtering:** You can enable an FFT low-pass filter for IMU windows with `imu.lowpass_cutoff_hz` in the config (for example, `20.0`). If your IMU sampling rate is low, the code will clip the cutoff to a safe Nyquist-aware value.
 
 You can also call the Python CLI directly:
 
@@ -448,6 +450,67 @@ Example output:
 ```
 
 > **Note:** `trackeval` is required. If you encounter NumPy 2.x compatibility issues with PyTorch 2.1, use `numpy<2` and `scipy<1.14` (the package still works despite the pip warning).
+
+---
+
+## Visualization
+
+The `src/visual/visualize_bboxes.py` script overlays bounding boxes and person/track IDs on source videos. It supports GT annotations, AlphaPose tracking results, and side-by-side comparison.
+
+### Supported Inputs
+
+| Source | Required Argument | Description |
+|--------|-------------------|-------------|
+| **Unified NPZ** | `--input_npz` | Reads `gt_bboxes`, `gt_visibility`, `gt_person_ids`. If `imu_person_map` is present, MAC addresses are shown next to IDs. |
+| **Annotation CSV** | `--anno_csv` + `--video` | Reads raw `p{N}_bbox_*` columns. |
+| **AlphaPose JSON** | `--alphapose_json` + `--video` | Reads tracked detections (`box` / `bbox` + `idx`). |
+
+### Usage Examples
+
+**Visualize GT from preprocessed NPZ** (auto-fetches `video_path` from NPZ):
+```bash
+python -m src.visual.visualize_bboxes \
+  --input_npz data/interim/custom/preprocess/sequences/custom_20260211_171423.npz \
+  --output visual/gt.mp4
+```
+
+**Visualize GT from annotation CSV:**
+```bash
+python -m src.visual.visualize_bboxes \
+  --video /data/fzliang/custom/2person/20260211_171423/video/20260211_171423.mp4 \
+  --anno_csv /data/fzliang/custom/2person/annotations/20260211_171423.anno.csv \
+  --output visual/gt.mp4
+```
+
+**Visualize AlphaPose tracking results:**
+```bash
+python -m src.visual.visualize_bboxes \
+  --video /data/fzliang/custom/2person/20260211_171423/video/20260211_171423.mp4 \
+  --alphapose_json data/interim/custom_complete/extract/20260211_171423/alphapose_raw/alphapose-results.json \
+  --output visual/pred.mp4
+```
+
+**Side-by-side GT vs Prediction comparison:**
+```bash
+python -m src.visual.visualize_bboxes \
+  --video /data/fzliang/custom/2person/20260211_171423/video/20260211_171423.mp4 \
+  --anno_csv /data/fzliang/custom/2person/annotations/20260211_171423.anno.csv \
+  --alphapose_json data/interim/custom_complete/extract/20260211_171423/alphapose_raw/alphapose-results.json \
+  --output visual/compare.mp4 \
+  --mode compare
+```
+
+- **Left panel** (green): `GROUND TRUTH` — GT bboxes with person IDs
+- **Right panel** (red): `PREDICTION` — AlphaPose/ByteTrack bboxes with track IDs
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--output` | **Required.** Output MP4 path. |
+| `--mode` | `single` (default) or `compare`. |
+| `--fps` | Override output FPS (default = source video FPS). |
+| `--no_progress` | Disable frame counter print. |
 
 ---
 

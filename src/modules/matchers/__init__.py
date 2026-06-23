@@ -6,7 +6,9 @@ from src.modules.matchers.losses import SymmetricInfoNCE, retrieval_top1
 
 # Deep-learning matchers
 from src.modules.matchers.dl_matchers.imu_video_matcher import IMUVideoMatcher
+from src.modules.matchers.dl_matchers.global_imu_video_matcher import GlobalIMUVideoMatcher
 from src.modules.matchers.dl_matchers.despite_matcher import DeSPITEMatcher
+from src.modules.matchers.physics_matchers import FrequencyPhysicsMatcher, FrequencyConfig
 
 # Encoders (backward-compatible re-exports)
 from src.modules.encoders.imu import IMUEncoder
@@ -23,7 +25,10 @@ __all__ = [
     "SymmetricInfoNCE",
     "retrieval_top1",
     "IMUVideoMatcher",
+    "GlobalIMUVideoMatcher",
     "DeSPITEMatcher",
+    "FrequencyPhysicsMatcher",
+    "FrequencyConfig",
     "IMUEncoder",
     "VideoEncoder",
     "build_motionbert_backbone",

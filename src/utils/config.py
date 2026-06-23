@@ -9,34 +9,38 @@ from typing import Any, Dict, Union
 import yaml
 
 
-def substitute_variables(obj: Any, root_dir: str) -> Any:
-    """Recursively substitute ${root_dir} variables in config objects.
+def substitute_variables(obj: Any, variables: Dict[str, str]) -> Any:
+    """Recursively substitute ${var} variables in config objects.
 
     Args:
         obj: Configuration object (dict, list, or primitive)
-        root_dir: Root directory to substitute for ${root_dir}
+        variables: Mapping of variable name -> replacement value
 
     Returns:
         Configuration with substituted variables
     """
     if isinstance(obj, dict):
-        return {k: substitute_variables(v, root_dir) for k, v in obj.items()}
+        return {k: substitute_variables(v, variables) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [substitute_variables(item, root_dir) for item in obj]
+        return [substitute_variables(item, variables) for item in obj]
     elif isinstance(obj, str):
-        return obj.replace("${root_dir}", root_dir)
+        for key, value in variables.items():
+            obj = obj.replace(f"${{{key}}}", value)
+        return obj
     else:
         return obj
 
 
-def load_config(config_path: Union[str, Path]) -> Dict[str, Any]:
+def load_config(config_path: Union[str, Path], extra_variables: Dict[str, str] | None = None) -> Dict[str, Any]:
     """Load YAML config file with variable substitution.
 
-    Supports ${root_dir} variable which will be replaced with the
-    value from root_dir field in the config.
+    Supports ${var} variables. By default, all top-level keys ending with
+    `_root` are treated as variables. Additionally, `root_dir` is supported
+    for backward compatibility. Optional extra_variables can be injected.
 
     Args:
         config_path: Path to YAML config file
+        extra_variables: Optional extra variables to inject
 
     Returns:
         Configuration dictionary with substituted variables
@@ -51,11 +55,19 @@ def load_config(config_path: Union[str, Path]) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"Invalid config format: {path}")
 
-    # Get root_dir from config
+    # Collect variables: all top-level *_root keys + legacy root_dir
+    variables: Dict[str, str] = {}
+    for key, value in data.items():
+        if key.endswith("_root") and isinstance(value, str):
+            variables[key] = value
     root_dir = data.get("root_dir")
-    if root_dir:
-        # Substitute ${root_dir} in all string values
-        data = substitute_variables(data, root_dir)
+    if root_dir and isinstance(root_dir, str):
+        variables["root_dir"] = root_dir
+    if extra_variables:
+        variables.update(extra_variables)
+
+    if variables:
+        data = substitute_variables(data, variables)
 
     return data
 
@@ -108,7 +120,8 @@ def resolve_config(config_path: Union[str, Path]) -> Dict[str, Any]:
     # extract.merge_* -> extract.merge_tracklets.*
     extract = cfg.get("extract")
     if isinstance(extract, dict):
-        merge_keys = [k for k in extract if k.startswith("merge_")]
+        # Preserve nested merge_tracklets config; only migrate legacy flat merge_* keys.
+        merge_keys = [k for k in extract if k.startswith("merge_") and k != "merge_tracklets"]
         if merge_keys:
             merge = extract.setdefault("merge_tracklets", {})
             for k in merge_keys:
@@ -174,7 +187,14 @@ def resolve_config(config_path: Union[str, Path]) -> Dict[str, Any]:
         train_cfg.setdefault("output", {})
         output = train_cfg["output"]
         output.setdefault("output_root", str(work_dir / "train"))
-        output.setdefault("save_dir", ".")
+        output.setdefault("run_name", project)
+
+    # Test output
+    test_cfg = cfg.get("test")
+    if isinstance(test_cfg, dict):
+        test_cfg.setdefault("output", {})
+        output = test_cfg["output"]
+        output.setdefault("output_root", str(work_dir / "test"))
         output.setdefault("run_name", project)
 
     return cfg

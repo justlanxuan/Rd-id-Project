@@ -1,16 +1,14 @@
 # TotalCapture full training using Vicon GT
 # S1-S5, 50 epochs
 
-project: totalcapture
+project: totalcapture_shuffle
 
 preprocess:
   dataset: totalcapture
   raw_root: /data/fzliang/totalcapture
   camera: cam1
-  output: ./data/interim/video_manifest.csv
 
 slice:
-  root: /data/fzliang/totalcapture
   window_len: 24
   stride: 16
   sensor_order: [L_LowLeg, R_LowLeg, L_LowArm, R_LowArm]
@@ -25,19 +23,59 @@ train:
     motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
     motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
     imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
-  epochs: 50
+  epochs: 200
   batch_size: 64
   num_workers: 8
   compute_imu_stats: true
   imu_sensor: R_LowArm
   repeat_single_sensor: 4
+  shuffle_video_in_batch: true
+  device: cuda:7
 
 test:
   batch_size: 64
   grouped_test:
     enabled: true
     group_sizes: "2,4,6,8,16"
-    num_trials: 50
+    num_trials: 200
     chunk_windows: 30
     min_chunk_windows: 15
     seed: 42
+
+# test:
+#   output:
+#     run_name: test_physics
+#   checkpoint: ""
+#   batch_size: 64
+#   matcher:
+#     dl_matcher:
+#       enabled: false
+#     physics_based_matcher:
+#       enabled: true
+#       evaluation_profile: multi_video
+#       frequency:
+#         enabled: true
+#         fs_hz: 30
+#         n_fft: 64
+#         top_k: 8
+#         band_min_hz: 0.3
+#         band_max_hz: 8.0
+#         use_hann: true
+#         use_log1p: true
+#         normalize: l2
+#         threshold: 0.0
+#         imu_signal: acc_norm_mean
+#         skeleton_signal: pelvis_right_wrist_speed
+#   grouped_test:
+#     enabled: true
+#     group_sizes: "2,4,5"
+#     num_trials: 200
+#     chunk_windows: 30
+#     min_chunk_windows: 15
+#     seed: 42
+#   synchronous_test:
+#     enabled: true
+#     group_size: 2
+#     num_trials: 200
+#     window_size: 24
+#     stride: 12

@@ -47,15 +47,36 @@ train:
   repeat_single_sensor: 4
 
 test:
+  output:
+    run_name: totalcapture_video_test_physics
   batch_size: 32
+  matcher:
+    dl_matcher:
+      enabled: false
+    physics_based_matcher:
+      enabled: true
+      iou_threshold: 0.5
+      frequency:
+        enabled: true
+        fs_hz: 30
+        n_fft: 64
+        top_k: 8
+        band_min_hz: 0.3
+        band_max_hz: 8.0
+        use_hann: true
+        use_log1p: true
+        normalize: l2
+        threshold: 0.0
+        imu_signal: acc_norm_mean
+        skeleton_signal: left_wrist_speed
   grouped_test:
-    enabled: true
+    enabled: false
     group_sizes: "2,4,6,8,16"
     num_trials: 50
     chunk_windows: 30
     min_chunk_windows: 15
     seed: 42
   synchronous_test:
-    enabled: true
+    enabled: false
     window_size: 24
     stride: 1

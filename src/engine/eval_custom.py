@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch.utils.data import DataLoader
 
-from src.datasets.alignment_dataset import WindowAlignmentDataset
+from src.datasets.alignment_dataset import WindowAlignmentDataset, lowpass_filter_fft
 from src.engine.common import build_alignment_model, build_loss_fn
 from src.modules.matchers import IMUVideoMatcher
 
@@ -39,8 +39,23 @@ def parse_args() -> argparse.Namespace:
         choices=["chunk_hungarian_2person", "same_time_2person", "global_top1"],
     )
     p.add_argument("--chunk_windows", type=int, default=30, help="Chunk size for chunk_hungarian_2person")
+    p.add_argument("--imu_stats_json", type=str, default="")
     p.add_argument("--imu_sensor", type=str, default="R_LowArm")
     p.add_argument("--repeat_single_sensor", type=int, default=4)
+    p.add_argument("--imu_lowpass_cutoff_hz", type=float, default=None, help="FFT low-pass cutoff for IMU windows in Hz; set <= 0 to disable.")
+    p.add_argument("--imu_lowpass_fs_hz", type=float, default=30.0, help="Sampling rate used by the IMU low-pass filter.")
+
+    # Global motion options (must match training config)
+    p.add_argument("--use_global_motion", action="store_true")
+    p.add_argument("--global_motion_input_dim", type=int, default=2)
+    p.add_argument("--global_motion_hidden_dim", type=int, default=64)
+    p.add_argument("--global_motion_num_layers", type=int, default=2)
+    p.add_argument("--global_motion_dropout", type=float, default=0.1)
+    p.add_argument("--global_motion_input_type", type=str, default="diff_raw")
+    p.add_argument("--global_motion_fusion_type", type=str, default="concat")
+    p.add_argument("--global_motion_fusion_proj", action="store_true")
+    p.add_argument("--global_motion_root_source", type=str, default="auto")
+
     p.add_argument("--save_json", type=str, default="")
     return p.parse_args()
 
@@ -52,6 +67,37 @@ def _read_csv_rows(path: Path) -> List[Dict[str, str]]:
         for row in reader:
             rows.append(row)
     return rows
+
+
+def _extract_root_trajectory_from_npz(
+    arr: Dict[str, np.ndarray],
+    st: int,
+    ed: int,
+    row: Dict[str, str],
+    root_source: str,
+) -> np.ndarray | None:
+    person_idx = int(row.get("person_idx", row.get("imu_idx", 0)) or 0)
+
+    if root_source in ("root_3d", "auto") and "gt_skeleton_meters" in arr:
+        skel = arr["gt_skeleton_meters"][st:ed]
+        if skel.ndim == 4:
+            person_idx = min(person_idx, skel.shape[1] - 1)
+            skel = skel[:, person_idx]
+        root = skel[:, 0, :]
+        return root.astype(np.float32)
+
+    if root_source in ("bbox_center", "auto"):
+        bbox_key = "extract_bboxes" if "extract_bboxes" in arr else ("gt_bboxes" if "gt_bboxes" in arr else None)
+        if bbox_key is not None:
+            bboxes = arr[bbox_key][st:ed]
+            if bboxes.ndim == 3:
+                person_idx = min(person_idx, bboxes.shape[1] - 1)
+                bboxes = bboxes[:, person_idx]
+            cx = (bboxes[:, 0] + bboxes[:, 2]) / 2.0
+            cy = (bboxes[:, 1] + bboxes[:, 3]) / 2.0
+            return np.stack([cx, cy], axis=-1).astype(np.float32)
+
+    return None
 
 
 def evaluate_global_top1(model, dataset, device, batch_size, num_workers) -> Dict[str, float]:
@@ -100,6 +146,8 @@ def evaluate_same_time_2person(
     rows: List[Dict[str, str]],
     root_dir: Path,
     device: torch.device,
+    use_global_motion: bool,
+    root_source: str,
 ) -> Dict[str, float]:
     """Per-window 2-person pairing accuracy."""
     groups: Dict[tuple[str, int, int], List[Dict[str, str]]] = {}
@@ -133,10 +181,16 @@ def evaluate_same_time_2person(
                 ed = int(r["window_end"])
                 imu = arr["imu"][st:ed].astype(np.float32)
                 skel = arr["skeleton"][st:ed].astype(np.float32)
+                root_traj = None
+                if use_global_motion:
+                    root_traj = _extract_root_trajectory_from_npz(arr, st, ed, r, root_source)
 
                 imu_t = torch.from_numpy(imu).unsqueeze(0).to(device)
                 skel_t = torch.from_numpy(skel).unsqueeze(0).to(device)
-                out = model(imu=imu_t, skeleton=skel_t)
+                forward_kwargs = {"imu": imu_t, "skeleton": skel_t}
+                if root_traj is not None:
+                    forward_kwargs["root_trajectory"] = torch.from_numpy(root_traj).unsqueeze(0).to(device)
+                out = model(**forward_kwargs)
 
                 imu_embs.append(F.normalize(out["imu"], dim=-1).squeeze(0))
                 vid_embs.append(F.normalize(out["video"], dim=-1).squeeze(0))
@@ -167,6 +221,8 @@ def evaluate_chunk_hungarian_2person(
     root_dir: Path,
     device: torch.device,
     chunk_windows: int,
+    use_global_motion: bool,
+    root_source: str,
 ) -> Dict[str, float]:
     """Chunk-level Hungarian matching for 2-person scenario."""
     if chunk_windows <= 0:
@@ -204,10 +260,16 @@ def evaluate_chunk_hungarian_2person(
                     ed = int(r["window_end"])
                     imu = arr["imu"][st:ed].astype(np.float32)
                     skel = arr["skeleton"][st:ed].astype(np.float32)
+                    root_traj = None
+                    if use_global_motion:
+                        root_traj = _extract_root_trajectory_from_npz(arr, st, ed, r, root_source)
 
                     imu_t = torch.from_numpy(imu).unsqueeze(0).to(device)
                     skel_t = torch.from_numpy(skel).unsqueeze(0).to(device)
-                    out = model(imu=imu_t, skeleton=skel_t)
+                    forward_kwargs = {"imu": imu_t, "skeleton": skel_t}
+                    if root_traj is not None:
+                        forward_kwargs["root_trajectory"] = torch.from_numpy(root_traj).unsqueeze(0).to(device)
+                    out = model(**forward_kwargs)
 
                     imu_embs.append(F.normalize(out["imu"], dim=-1).squeeze(0).cpu().numpy())
                     vid_embs.append(F.normalize(out["video"], dim=-1).squeeze(0).cpu().numpy())
@@ -260,12 +322,23 @@ def main() -> None:
     args = parse_args()
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
+    imu_mean = None
+    imu_std = None
+    if args.imu_stats_json:
+        stats = json.loads(Path(args.imu_stats_json).read_text())
+        imu_mean = np.asarray(stats["imu_mean"], dtype=np.float32)
+        imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
+
     imu_sensor = args.imu_sensor.strip() if args.imu_sensor else None
     ds = WindowAlignmentDataset(
         args.test_csv,
         root_dir=args.data_root,
+        imu_mean=imu_mean,
+        imu_std=imu_std,
         imu_sensor=imu_sensor,
         repeat_single_sensor=args.repeat_single_sensor,
+        imu_lowpass_cutoff_hz=args.imu_lowpass_cutoff_hz,
+        imu_lowpass_fs_hz=args.imu_lowpass_fs_hz,
     )
 
     model, _ = build_alignment_model(args, device)
@@ -278,10 +351,23 @@ def main() -> None:
     if args.eval_mode == "global_top1":
         metrics = evaluate_global_top1(model, ds, device, args.batch_size, args.num_workers)
     elif args.eval_mode == "same_time_2person":
-        metrics = evaluate_same_time_2person(model, rows, root_dir, device)
+        metrics = evaluate_same_time_2person(
+            model,
+            rows,
+            root_dir,
+            device,
+            use_global_motion=bool(args.use_global_motion),
+            root_source=str(args.global_motion_root_source),
+        )
     elif args.eval_mode == "chunk_hungarian_2person":
         metrics = evaluate_chunk_hungarian_2person(
-            model, rows, root_dir, device, args.chunk_windows
+            model,
+            rows,
+            root_dir,
+            device,
+            args.chunk_windows,
+            use_global_motion=bool(args.use_global_motion),
+            root_source=str(args.global_motion_root_source),
         )
     else:
         raise ValueError(f"Unknown eval_mode: {args.eval_mode}")

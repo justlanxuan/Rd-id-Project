@@ -92,7 +92,7 @@ def _needs_merge(skeleton_json: Path, cfg: Dict[str, Any]) -> bool:
 
 
 def _run_merge(json_path: Path, cfg: Dict[str, Any], dry_run: bool) -> None:
-    repo_root = Path(__file__).resolve().parents[4]
+    repo_root = Path(__file__).resolve().parents[3]
     script = repo_root / "src" / "utils" / "merge_tracklets.py"
     if not script.exists():
         raise FileNotFoundError(f"merge_tracklets script not found: {script}")
@@ -150,17 +150,23 @@ def _process_single(
 
     skeleton_json = video_result_dir / "skeleton.json"
     skip_existing = extract_cfg.get("skip_existing", False)
+    existing_skeleton = skeleton_json.exists()
+    merge_needed = _needs_merge(skeleton_json, extract_cfg)
 
-    if skip_existing and skeleton_json.exists() and not _needs_merge(skeleton_json, extract_cfg):
+    if skip_existing and existing_skeleton and not merge_needed:
         print(f"[SKIP] {skeleton_json} already exists")
         return
 
-    if dry_run:
-        print(f"[DRY_RUN] Would extract {video_path} -> {video_result_dir}")
+    if existing_skeleton and skip_existing:
+        print(f"[SKIP-EXTRACT] Reusing existing {skeleton_json}")
     else:
-        skeleton_json = Path(extractor.extract(str(video_path), str(video_result_dir)))
+        if dry_run:
+            print(f"[DRY_RUN] Would extract {video_path} -> {video_result_dir}")
+        else:
+            skeleton_json = Path(extractor.extract(str(video_path), str(video_result_dir)))
 
-    if _needs_merge(skeleton_json, extract_cfg):
+    # If merge is required, always run it even when extraction was skipped.
+    if merge_needed:
         _run_merge(skeleton_json, extract_cfg, dry_run)
 
     # Write summary

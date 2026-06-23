@@ -1,8 +1,13 @@
-project: custom
+project: custom_complete
+
 
 preprocess:
+  imu:
+    lowpass_cutoff_hz: 10.0
+    lowpass_fs_hz: 100.0
   dataset: custom
   raw_root: /data/fzliang/custom
+  skeleton_normalize: false
 
 extract:
   detector: bytetrack
@@ -11,7 +16,7 @@ extract:
   skip_existing: true
   gpu: 0
   merge_tracklets:
-    enabled: false
+    enabled: true
     max_gap: 10000000
     score_thresh: 2.2
     max_norm_dist: 2.8
@@ -22,19 +27,22 @@ extract:
 slice:
   window_len: 24
   stride: 16
-  # Use session-level splits for custom dataset
-  train_sessions: "20260211_171423,20260211_171724,20260211_172257"
+  # Use session-level splits for custom dataset 20260211_171423,20260211_171724,20260211_172257,20260211_172522
+  train_sessions: "20260211_171423,20260211_171724,20260211_172522"
   val_sessions: "20260211_172257"
-  test_sessions: "20260211_172522"
+  test_sessions: "20260211_172257"
   max_sequences: 0
+  skeleton_normalize: true
 
 train:
+  output:
+    run_name: custom_complete_without_filter_20
   model:
     motionbert_root: /home/fzliang/origin/MotionBERT
     motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
     motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
     imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
-  epochs: 30
+  epochs: 50
   batch_size: 64
   num_workers: 8
   compute_imu_stats: true
@@ -42,15 +50,37 @@ train:
   repeat_single_sensor: 4
 
 test:
+  output:
+    run_name: custom_complete_without_filter_20
+  checkpoint: ""
   batch_size: 64
+  matcher:
+    dl_matcher:
+      enabled: true
+    physics_based_matcher:
+      enabled: false
+      evaluation_profile: single_sequence
+      frequency:
+        enabled: true
+        fs_hz: 30
+        n_fft: 64
+        top_k: 8
+        band_min_hz: 0.3
+        band_max_hz: 8.0
+        use_hann: true
+        use_log1p: true
+        normalize: l2
+        threshold: 0.0
+        imu_signal: acc_norm_mean
+        skeleton_signal: pelvis_left_wrist_speed
   grouped_test:
     enabled: true
     group_sizes: "2,4,6,8,16"
-    num_trials: 50
+    num_trials: 200
     chunk_windows: 30
     min_chunk_windows: 15
     seed: 42
   synchronous_test:
     enabled: true
     window_size: 24
-    stride: 1
+    stride: 16

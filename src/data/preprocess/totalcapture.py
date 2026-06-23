@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from pathlib import Path
 from typing import Tuple
 
@@ -48,6 +49,41 @@ def load_preprocess_cfg(config_path: str | None) -> dict:
     if not isinstance(preprocess, dict):
         raise ValueError(f"Invalid preprocess section in config: {config_path}")
     return preprocess
+
+
+def _parse_bool(value, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in {"1", "true", "yes", "y", "on"}:
+        return True
+    if s in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+def _resolve_synthetic_root(root: Path, side: str | None) -> Path:
+    if not side:
+        return root
+    token = str(side).strip().lower()
+    candidates = [root / token, root / token.upper(), root / token.capitalize()]
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    return root
+
+
+def _collect_synthetic_npzs(root: Path, side: str | None) -> list[Path]:
+    resolved = _resolve_synthetic_root(root, side)
+    direct = sorted(resolved.glob('*.npz'))
+    if direct:
+        return direct
+    if side:
+        token = str(side).strip().lower()
+        return sorted(p for p in resolved.rglob('*.npz') if token in p.name.lower())
+    return sorted(resolved.rglob('*.npz'))
+
 
 
 def get_video_resolution(video_path: Path) -> Tuple[int, int]:
@@ -100,7 +136,51 @@ def main() -> None:
     seq_dir = output_dir / "sequences"
     seq_dir.mkdir(parents=True, exist_ok=True)
 
+    imu_source = str(preprocess_cfg.get("imu_source", "xsens") or "xsens").strip().lower()
+    if imu_source == "synthetic":
+        synthetic_root = preprocess_cfg.get("synthetic_imu_root")
+        if not synthetic_root:
+            raise ValueError("preprocess.synthetic_imu_root is required when imu_source=synthetic")
+        synthetic_side = preprocess_cfg.get("synthetic_imu_side")
+        synthetic_root = Path(synthetic_root).expanduser().resolve()
+        npz_paths = _collect_synthetic_npzs(synthetic_root, synthetic_side)
+        if not npz_paths:
+            raise FileNotFoundError(f"No synthetic npz files found under {synthetic_root}")
+
+        manifest_rows = []
+        seen_videos = set()
+        for npz_path in npz_paths:
+            shutil.copy2(npz_path, seq_dir / npz_path.name)
+            json_path = npz_path.with_suffix(".json")
+            if json_path.exists():
+                shutil.copy2(json_path, seq_dir / json_path.name)
+            try:
+                data = dict(np.load(npz_path, allow_pickle=True))
+            except Exception:
+                continue
+            video_path = ""
+            if "video_path" in data:
+                try:
+                    video_path = str(data["video_path"].item())
+                except Exception:
+                    video_path = ""
+            if video_path and video_path not in seen_videos:
+                seen_videos.add(video_path)
+                manifest_rows.append({"video_path": video_path})
+
+        manifest_csv.parent.mkdir(parents=True, exist_ok=True)
+        with manifest_csv.open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["video_path"])
+            writer.writeheader()
+            for row in manifest_rows:
+                writer.writerow(row)
+
+        print(f"Preprocessed {len(npz_paths)} sequences -> {output_dir}")
+        print(f"Manifest: {manifest_csv} ({len(manifest_rows)} videos)")
+        return
+
     sensor_order = parse_sensor_order(preprocess_cfg.get("sensor_order"))
+    skeleton_normalize = _parse_bool(preprocess_cfg.get("skeleton_normalize"), default=True)
     sequences = find_sequences(raw_root)
 
     manifest_rows: list[dict[str, str]] = []
@@ -119,7 +199,11 @@ def main() -> None:
         quat4 = quat4[:tlen]
         acc3 = acc3[:tlen]
         imu48 = convert_imu_to_48(quat4, acc3)
-        skel17 = normalize_skeleton(skel17)
+        skel17_meters = skel17.copy().astype(np.float32)
+        if skeleton_normalize:
+            skel17 = normalize_skeleton(skel17)
+        else:
+            skel17 = skel17.astype(np.float32)
 
         video_path = find_video_for_sequence(raw_root, subject, session, camera)
         if video_path is not None and video_path.exists():
@@ -151,6 +235,7 @@ def main() -> None:
             gt_bboxes=gt_bboxes,
             gt_visibility=gt_visibility,
             gt_skeleton=gt_skeleton,
+            gt_skeleton_meters=skel17_meters[:, np.newaxis, :, :].astype(np.float32),
         )
 
         meta = {

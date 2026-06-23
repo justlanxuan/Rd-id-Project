@@ -7,3 +7,8 @@ src/data/interim/
 src/data/output/
 **/__pycache__/
 *.pyc
+visual/
+experiments/
+experiments/synthetic_imu_matching/*.json
+experiments/synthetic_imu_matching/__pycache__
+experiments/synthetic_imu_matching/*.npz

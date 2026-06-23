@@ -6,6 +6,11 @@ import torch
 import torch.nn as nn
 
 from src.modules.encoders.base import BaseEncoder
+from src.modules.encoders.imu_adapter import (
+    AffineIMUAdapter,
+    PhysicsAwareIMUAdapter,
+    TemporalConvIMUAdapter,
+)
 
 
 class IMUEncoder(BaseEncoder):
@@ -17,12 +22,24 @@ class IMUEncoder(BaseEncoder):
         hidden_size: int = 512,
         num_layers: int = 2,
         device: str = "cuda",
+        adapter_type: str | None = None,
     ) -> None:
         super().__init__()
         self.device = device
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+
+        self.adapter = None
+        if adapter_type == "affine":
+            self.adapter = AffineIMUAdapter(input_size)
+        elif adapter_type == "physics":
+            self.adapter = PhysicsAwareIMUAdapter()
+        elif adapter_type == "temporal_conv":
+            self.adapter = TemporalConvIMUAdapter(input_size)
+        elif adapter_type is not None and adapter_type != "none":
+            raise ValueError(f"Unknown adapter_type: {adapter_type}")
+
         self.lstm = nn.LSTM(
             input_size=self.input_size,
             hidden_size=self.hidden_size,
@@ -34,6 +51,8 @@ class IMUEncoder(BaseEncoder):
         return self.forward(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.adapter is not None:
+            x = self.adapter(x)
         bsz = x.shape[0]
         h_0 = torch.zeros(self.num_layers, bsz, self.hidden_size, device=x.device)
         c_0 = torch.zeros(self.num_layers, bsz, self.hidden_size, device=x.device)
