@@ -37,9 +37,12 @@
 | **Our pipeline** | synchronous FrameAcc | **0.956** | 逐帧匹配准确率 |
 
 **解读**：
-- MoBInd 的 localization 是**单帧/单窗口级**的细粒度分类，Person 98%、Limb 89% 非常强。
+- MoBInd 的 Person localization 本质上就是 **IMU-to-person identification**：在单个 5 秒窗口内，把 `P` 段 IMU 信号与 `P` 个人的 pose 做 `P × P` 匹配。结果是 **98.01%**，确实非常强。
 - 我们的 grouped G2–G8 100% 是**聚合多个窗口后的 chunk-level 匹配**，难度不同，不能直接比较。
-- 我们的 synchronous HOTA 0.887 / FrameAcc 0.956 说明在**带时序的跟踪场景**下，我们的 pipeline 仍能保持较高的身份一致性。
+- 我们的 **synchronous FrameAcc = 0.956** 与 MoBInd Person localization 在概念上最接近：都是判断“哪段 IMU 属于哪个人”。但两者的评估方式不同：
+  - MoBInd：在**单个窗口**内做一次匹配，没有时序上下文，也不处理漏检/轨迹碎片化，输入是官方 pose2d/pose3d。
+  - 我们的 FrameAcc：在**整个 sequence 的每一帧**上，用滑动窗口 + Hungarian 分配判断 IMU 与 extracted skeleton track 是否对应，只统计有有效 GT-to-extract 映射的可见帧。
+- 因此 **98.01% vs 95.6%** 可以做横向参考，但不是严格同任务指标：MoBInd 的任务更纯粹，我们的任务多了时序连续性和 extracted track 映射带来的噪声。
 - 我们没有直接输出 limb-level 定位指标。
 
 ### 2.3 时序同步
