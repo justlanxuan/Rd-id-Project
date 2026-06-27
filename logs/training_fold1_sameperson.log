@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/home/fzliang/Autism-project/experiments/imu_guided_video_encoder/run_training.py", line 20, in <module>
+    from src.datasets.alignment_dataset import WindowAlignmentDataset
+ModuleNotFoundError: No module named 'src'

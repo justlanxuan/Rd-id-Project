@@ -20,6 +20,19 @@
 | A3 | 在完整 20-sequence 测试集上评估 | `results/full_test_1imu.json` |
 | A4 | 在 16 train-only 序列上评估（1-window + 4-window vote） | `results/ours_1imu_1window.json`, `results/ours_1imu_4window_vote.json` |
 | A5 | 与 4-IMU 对比并可视化 | `results/results.md`, `results/figures/frameacc_4imu_vs_1imu.png` |
+| **A6** | **Clip 级下降规律诊断：活动丰富度、静态帧比例与可视化** | `vis/test_clips/*.mp4`, `results/A6_activity_richness_analysis/` ✅ 已完成 |
+
+## A6 子实验细节
+- **A6a**：将 20 个 test clip 的 `cam03` 图像帧合成为 mp4，保存到 `vis/test_clips/`。
+- **A6b**：从 MoBInd NPZ 计算每个 clip 的活动丰富度指标：
+  - 右腕 IMU 运动能量（`wrist_energy_mean/std`）
+  - 全 IMU 运动能量（`full_imu_energy_mean/std`）
+  - 全身骨架根节点速度（`skeleton_velocity_mean/std`）
+  - 姿态多样性（`pose_diversity` = 各关节时序标准差均值）
+  - 静态帧比例（`static_frame_ratio`，基于 wrist energy 阈值）
+  - 时长、人数、活动类别
+- **A6c**：计算每个 clip 从 4-IMU 降到 1-IMU 的 FrameAcc 下降幅度 `Δ = Acc_4imu - Acc_1imu`。
+- **A6d**：做相关性分析与可视化（散点图 + Spearman/Pearson），撰写 `results/A6_activity_richness_analysis/results.md`，解释“为什么有些 clip 下降远高于其他”。
 
 ## 关键控制变量
 - 数据：复用 `data/interim/egohumans_full_extract/slice/` 下的 NPZ 与 CSV。

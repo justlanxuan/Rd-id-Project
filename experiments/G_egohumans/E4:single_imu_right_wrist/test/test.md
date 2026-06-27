@@ -12,6 +12,7 @@
 | A3 | pipeline test stage | 生成 full test 的 synchronous/grouped 结果，包含 FrameAcc |
 | A4 | `src/engine/eval_synchronous.py` 在 16-train-only CSV 上 | 输出 1-window 与 4-window vote 的 FrameAcc |
 | A5 | 对比脚本 | 生成 `results/results.md` 与对比图 |
+| A6 | Clip 级下降规律诊断 | 生成 `results/A6_activity_richness_analysis/results.md` 与 `vis/test_clips/*.mp4` |
 
 ## 失败判定
 - 训练报错 `Unsupported sensor_name=R_LowArm` → 检查 sensor 名称拼写与 `alignment_dataset.py` 中的 `order` 列表。

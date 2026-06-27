@@ -1,0 +1,58 @@
+project: totalcapture_physic_imu
+
+preprocess:
+  dataset: totalcapture
+  raw_root: /data/fzliang/totalcapture
+  camera: cam1
+
+slice:
+  window_len: 200
+  stride: 100
+  sensor_order: [L_LowLeg, R_LowLeg, L_LowArm, R_LowArm]
+  train_subjects: S1,S2,S3
+  val_subjects: S4
+  test_subjects: S5
+  max_sequences: 0
+  skeleton_source: vicon
+
+train:
+  output:
+    run_name: totalcapture_physic_imu
+  model:
+    imu_encoder_type: physics
+    physics_d_model: 128
+    physics_n_heads: 4
+    physics_num_layers: 3
+    physics_fs_hz: 30.0
+    physics_n_fft: 64
+    physics_dropout: 0.1
+    motionbert_root: /home/fzliang/origin/MotionBERT
+    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
+    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
+  epochs: 100
+  batch_size: 8
+  num_workers: 4
+  compute_imu_stats: true
+  imu_sensor: R_LowArm
+  repeat_single_sensor: 4
+  lr_backbone: 0.0
+  lr_heads: 1e-3
+  temperature: 0.1
+  learn_temperature: true
+  freeze_backbone_epochs: 100
+
+test:
+  output:
+    run_name: totalcapture_physic_imu
+  checkpoint: ""
+  batch_size: 8
+  matcher:
+    dl_matcher:
+      enabled: true
+  grouped_test:
+    enabled: true
+    group_sizes: "2,4,6,8,16"
+    num_trials: 50
+    chunk_windows: 30
+    min_chunk_windows: 15
+    seed: 42

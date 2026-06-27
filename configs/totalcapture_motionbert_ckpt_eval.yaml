@@ -1,0 +1,28 @@
+project: totalcapture
+
+paths:
+  data_root: /home/fzliang/MotionBERT/alignment/data/totalcapture
+  test_csv: /home/fzliang/MotionBERT/alignment/data/totalcapture/windows_test.csv
+
+train:
+  output:
+    run_name: totalcapture_motionbert_ckpt_eval
+  model:
+    motionbert_root: /home/fzliang/MotionBERT
+    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
+    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
+  imu_sensor: R_LowArm
+  repeat_single_sensor: 4
+
+test:
+  output:
+    run_name: totalcapture_motionbert_ckpt_eval
+  checkpoint: /home/fzliang/MotionBERT/alignment/checkpoints/full_singleimu/best.pt
+  batch_size: 64
+  grouped_test:
+    enabled: true
+    group_sizes: "2,4,6,8,16"
+    num_trials: 200
+    chunk_windows: 30
+    min_chunk_windows: 15
+    seed: 42
