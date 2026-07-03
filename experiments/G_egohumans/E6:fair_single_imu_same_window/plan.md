@@ -90,6 +90,7 @@ E5 在 MoBInd 官方 action split 上做了公平对比，但仍有两大混淆�
 - 在 `experiments/G_egohumans/E6:fair_single_imu_same_window/config/mobind/` 下创建 Stage1/Stage2 YAML。
 - 修改 `configs/config.py` 的 `limb_list`（或用 patch 脚本在训练前临时替换）。
 - 运行 `preprocess/EgoHumans/cache.py` 与 `cache_sync.py` 生成单 IMU cache。
+  - ⚠️ 必须确保 `cache.py` 已修复肢体索引映射 bug（使用固定肢体顺序 `['LeftWrist','RightWrist','LeftKnee','RightKnee','Head']` 按名称取索引），否则单 IMU cache 会保存错误肢体。详见 `diagnosis.md`。
 
 ### A2. 重新训练 MoBInd
 ```bash

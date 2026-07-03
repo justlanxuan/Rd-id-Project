@@ -57,4 +57,4 @@
 ## 5. 结论
 重新训练的 MoBInd 在官方全配置下达到了与官方 checkpoint 相当的 FrameAcc（0.9675 vs 0.9666），说明本仓库对 MoBInd 的训练/评估流程复现是正确的。
 
-因此，E6 中单 IMU + 24 帧窗口下 MoBInd 的 FrameAcc 仅为 0.4393，应归因于**输入设置本身**（单一 IMU、短窗口导致信息不足），而非训练或评估代码 bug。
+后续进一步排查发现，E6 低分的真正原因是 `preprocess/EgoHumans/cache.py` 的肢体索引映射 bug：当临时把 `limb_list` 改为 `["RightWrist"]` 时，脚本按 `enumerate(limb_list)` 取了 `imu_data[:, 0]`（实际为 `LeftWrist`），但文件存为 `RightWrist`，导致训练/测试数据不一致。修复该 bug 后，E6-correct 单 IMU / 24 帧达到 **0.9548**，证明 MoBInd 训练/评估流程本身没有问题。

@@ -165,6 +165,7 @@ class WindowAlignmentDataset(Dataset):
             "subject": row.get("subject", ""),
             "session": row.get("session", ""),
             "split": row.get("split", ""),
+            "domain": row.get("domain", ""),
         }
 
         if self.return_root_trajectory:

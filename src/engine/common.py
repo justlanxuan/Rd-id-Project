@@ -117,7 +117,14 @@ def build_alignment_model(
         )
     else:
         video_encoder = VideoEncoder(backbone=backbone, rep_dim=embed_dim, temporal_layers=2)
-        model = IMUVideoMatcher(imu_encoder=imu_encoder, video_encoder=video_encoder).to(device)
+        num_domains = getattr(args, "num_domains", 0)
+        domain_hidden_dim = getattr(args, "domain_hidden_dim", 256)
+        model = IMUVideoMatcher(
+            imu_encoder=imu_encoder,
+            video_encoder=video_encoder,
+            num_domains=num_domains,
+            domain_hidden_dim=domain_hidden_dim,
+        ).to(device)
 
     init_alignment_ckpt = getattr(args, "init_alignment_ckpt", "")
     if init_alignment_ckpt:

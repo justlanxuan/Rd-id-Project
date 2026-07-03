@@ -11,10 +11,12 @@ from typing import Dict
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from src.datasets.alignment_dataset import WindowAlignmentDataset, lowpass_filter_fft
 from src.engine.common import build_alignment_model, build_optimizer, build_loss_fn
+from src.modules.domain import dann_alpha_schedule
 from src.modules.matchers import retrieval_top1
 
 
@@ -116,6 +118,21 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Randomly shuffle video embeddings within each batch during training to break position bias."
     )
+
+    # Domain adversarial options
+    parser.add_argument("--num_domains", type=int, default=0,
+                        help="Number of domains for adversarial training. 0 disables DANN.")
+    parser.add_argument("--domain_loss_weight", type=float, default=0.0,
+                        help="Weight for domain classification loss.")
+    parser.add_argument("--domain_hidden_dim", type=int, default=256,
+                        help="Hidden dim of the domain classifier MLP.")
+    parser.add_argument("--domain_alpha", type=float, default=1.0,
+                        help="Fixed Gradient Reversal Layer alpha.")
+    parser.add_argument("--domain_schedule", action="store_true",
+                        help="Use increasing alpha schedule: 2/(1+exp(-10*p))-1.")
+    parser.add_argument("--domain_label_map", type=str, default="egohumans:0,custom:1",
+                        help="Domain label mapping in CSV domain column, e.g. 'egohumans:0,custom:1'.")
+
     return parser.parse_args()
 
 
@@ -136,7 +153,35 @@ def move_to_device(batch: Dict[str, torch.Tensor], device: torch.device) -> Dict
     }
     if "root_trajectory" in batch:
         result["root_trajectory"] = batch["root_trajectory"].to(device)
+    if "domain" in batch:
+        result["domain"] = batch["domain"]
     return result
+
+
+def parse_domain_label_map(spec: str) -> Dict[str, int]:
+    mapping: Dict[str, int] = {}
+    for item in (spec or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise ValueError(f"Invalid domain_label_map item: {item}")
+        k, v = item.split(":", 1)
+        mapping[k.strip().lower()] = int(v.strip())
+    return mapping
+
+
+def domain_labels_from_batch(batch_domains, domain_map: Dict[str, int], device: torch.device):
+    if batch_domains is None:
+        return None
+
+    if isinstance(batch_domains, (list, tuple)):
+        domains = [str(x).strip().lower() for x in batch_domains]
+    else:
+        domains = [str(batch_domains).strip().lower()]
+
+    labels = [domain_map.get(d, 0) for d in domains]
+    return torch.tensor(labels, dtype=torch.long, device=device)
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
@@ -221,16 +266,18 @@ def count_trainable_params(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def evaluate_epoch(model, data_loader, loss_fn, device) -> Dict[str, float]:
+def evaluate_epoch(model, data_loader, loss_fn, device, domain_loss_weight: float = 0.0, domain_map: Dict[str, int] | None = None) -> Dict[str, float]:
     if data_loader is None:
-        return {"loss": 0.0, "top1": 0.0}
+        return {"loss": 0.0, "top1": 0.0, "main_loss": 0.0, "aux_loss": 0.0, "domain_loss": 0.0}
 
     model.eval()
     total_loss = 0.0
     total_main_loss = 0.0
     total_aux_loss = 0.0
+    total_domain_loss = 0.0
     total_acc = 0.0
     total_batches = 0
+    use_domain = domain_loss_weight > 0 and getattr(model, "domain_classifier", None) is not None
 
     with torch.no_grad():
         for batch in data_loader:
@@ -244,11 +291,20 @@ def evaluate_epoch(model, data_loader, loss_fn, device) -> Dict[str, float]:
             aux_loss = torch.zeros((), device=main_loss.device)
             if aux_weight > 0.0 and "video_global" in out:
                 aux_loss = loss_fn(out["imu"], out["video_global"])
-            loss = main_loss + aux_weight * aux_loss
+
+            domain_loss = torch.zeros((), device=main_loss.device)
+            if use_domain:
+                domain_labels = domain_labels_from_batch(b.get("domain"), domain_map or {}, device)
+                if domain_labels is not None and domain_labels.shape[0] == out["imu"].shape[0]:
+                    domain_logits = model.domain_classifier(out["imu"])
+                    domain_loss = F.cross_entropy(domain_logits, domain_labels)
+
+            loss = main_loss + aux_weight * aux_loss + domain_loss_weight * domain_loss
             acc = retrieval_top1(out["imu"], out["video"])
             total_loss += float(loss.item())
             total_main_loss += float(main_loss.item())
             total_aux_loss += float(aux_loss.item())
+            total_domain_loss += float(domain_loss.item())
             total_acc += acc
             total_batches += 1
 
@@ -258,6 +314,7 @@ def evaluate_epoch(model, data_loader, loss_fn, device) -> Dict[str, float]:
         "loss": total_loss / total_batches,
         "main_loss": total_main_loss / total_batches,
         "aux_loss": total_aux_loss / total_batches,
+        "domain_loss": total_domain_loss / total_batches,
         "top1": total_acc / total_batches,
     }
 
@@ -362,6 +419,7 @@ def main() -> None:
 
     model, cfg_name = build_alignment_model(args, device, embed_dim=args.embed_dim)
     model.global_motion_aux_weight = float(args.global_motion_aux_weight)
+    domain_map = parse_domain_label_map(args.domain_label_map)
 
     # If adapter_train_only: freeze everything except adapter parameters
     adapter_param_count = 0
@@ -415,12 +473,23 @@ def main() -> None:
             else:
                 p.requires_grad = False
 
+        if getattr(model, "domain_classifier", None) is not None:
+            if args.domain_schedule:
+                progress = (epoch - 1) / max(args.epochs - 1, 1)
+                alpha = dann_alpha_schedule(progress)
+                model.domain_classifier.set_alpha(alpha)
+                print(f"[INFO] Epoch {epoch}: domain alpha = {alpha:.4f} (progress={progress:.3f})")
+            else:
+                model.domain_classifier.set_alpha(args.domain_alpha)
+
         model.train()
         running_loss = 0.0
         running_main_loss = 0.0
         running_aux_loss = 0.0
+        running_domain_loss = 0.0
         running_acc = 0.0
         steps = 0
+        use_domain = args.domain_loss_weight > 0 and getattr(model, "domain_classifier", None) is not None
 
         for step, batch in enumerate(train_loader, start=1):
             b = move_to_device(batch, device)
@@ -451,7 +520,15 @@ def main() -> None:
             aux_loss = torch.zeros((), device=main_loss.device)
             if args.global_motion_aux_weight > 0.0 and video_global_for_loss is not None:
                 aux_loss = loss_fn(out["imu"], video_global_for_loss, labels_a=labels_a, labels_b=labels_b)
-            loss = main_loss + args.global_motion_aux_weight * aux_loss
+
+            domain_loss = torch.zeros((), device=main_loss.device)
+            if use_domain:
+                domain_labels = domain_labels_from_batch(b.get("domain"), domain_map, device)
+                if domain_labels is not None and domain_labels.shape[0] == out["imu"].shape[0]:
+                    domain_logits = model.domain_classifier(out["imu"])
+                    domain_loss = F.cross_entropy(domain_logits, domain_labels)
+
+            loss = main_loss + args.global_motion_aux_weight * aux_loss + args.domain_loss_weight * domain_loss
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -463,6 +540,7 @@ def main() -> None:
             running_loss += float(loss.item())
             running_main_loss += float(main_loss.item())
             running_aux_loss += float(aux_loss.item())
+            running_domain_loss += float(domain_loss.item())
             running_acc += acc
             steps += 1
 
@@ -475,20 +553,28 @@ def main() -> None:
                 print(
                     f"[Epoch {epoch}/{args.epochs}] step {step}/{len(train_loader)} "
                     f"loss={running_loss / steps:.4f} main={running_main_loss / steps:.4f} "
-                    f"aux={running_aux_loss / steps:.4f} top1={running_acc / steps:.4f}"
+                    f"aux={running_aux_loss / steps:.4f} domain={running_domain_loss / steps:.4f} top1={running_acc / steps:.4f}"
                 )
 
-        val_metrics = evaluate_epoch(model, val_loader, loss_fn, device)
+        val_metrics = evaluate_epoch(
+            model,
+            val_loader,
+            loss_fn,
+            device,
+            domain_loss_weight=args.domain_loss_weight,
+            domain_map=domain_map,
+        )
         train_loss = running_loss / max(steps, 1)
         train_main_loss = running_main_loss / max(steps, 1)
         train_aux_loss = running_aux_loss / max(steps, 1)
+        train_domain_loss = running_domain_loss / max(steps, 1)
         train_top1 = running_acc / max(steps, 1)
 
         print(
             f"Epoch {epoch}: train_loss={train_loss:.4f} train_main={train_main_loss:.4f} "
-            f"train_aux={train_aux_loss:.4f} train_top1={train_top1:.4f} "
+            f"train_aux={train_aux_loss:.4f} train_domain={train_domain_loss:.4f} train_top1={train_top1:.4f} "
             f"val_loss={val_metrics['loss']:.4f} val_main={val_metrics['main_loss']:.4f} "
-            f"val_aux={val_metrics['aux_loss']:.4f} val_top1={val_metrics['top1']:.4f}"
+            f"val_aux={val_metrics['aux_loss']:.4f} val_domain={val_metrics['domain_loss']:.4f} val_top1={val_metrics['top1']:.4f}"
         )
 
         epoch_logs.append(
@@ -497,10 +583,12 @@ def main() -> None:
                 "train_loss": train_loss,
                 "train_main_loss": train_main_loss,
                 "train_aux_loss": train_aux_loss,
+                "train_domain_loss": train_domain_loss,
                 "train_top1": train_top1,
                 "val_loss": val_metrics["loss"],
                 "val_main_loss": val_metrics["main_loss"],
                 "val_aux_loss": val_metrics["aux_loss"],
+                "val_domain_loss": val_metrics["domain_loss"],
                 "val_top1": val_metrics["top1"],
             }
         )

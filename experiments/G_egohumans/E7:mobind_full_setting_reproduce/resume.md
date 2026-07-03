@@ -7,7 +7,7 @@
 * **Mean FrameAcc (24 test sequences): 0.9675**
 * 与 E5 官方 checkpoint 的 0.9666 基本一致（差距 < 0.001）。
 * **复现成功**：MoBInd 训练/评估流程无 bug。
-* E6 中低性能（0.4393）归因于单 IMU + 24 帧输入设置，而非代码问题。
+* 后续进一步排查发现，E6 中低性能（0.4393）实际由 `preprocess/EgoHumans/cache.py` 肢体索引映射 bug 导致；修复后 E6-correct 单 IMU / 24 帧达到 0.9548，说明 MoBInd 训练/评估流程本身无 bug。
 
 ## 3. 关键结果文件
 * `results/results.md`

@@ -1,9 +1,9 @@
 # E7: MoBInd Full-Setting Reproduction Sanity Check
 
 ## 1. 背景与动机
-E6 中 MoBInd 在单 IMU + 24 帧窗口下的 FrameAcc（0.4393）显著低于我们的 pipeline，用户怀疑可能是复现方法存在问题。为了排除这一疑虑，需要先用 **MoBInd 官方原生设置**（5 个 IMU、5 秒/100 帧窗口）重新训练一遍 MoBInd，并评估其 FrameAcc。
+原始 E6 报告 MoBInd 在单 IMU + 24 帧窗口下的 FrameAcc（0.4393）显著低于我们的 pipeline，用户怀疑可能是复现方法存在问题。为了排除训练/评估流程的 bug，先用 **MoBInd 官方原生设置**（5 个 IMU、5 秒/100 帧窗口）重新训练一遍 MoBInd，并评估其 FrameAcc。
 
-如果复现结果接近官方 checkpoint 的 0.9666（E5 结果），则说明我们的 MoBInd 训练/评估流程是正确的；单 IMU 24 帧性能低确实是输入设置导致的。如果复现结果也远低于 0.9666，则说明训练流程或代码改动存在 bug，需要修复。
+后续排查发现 E6 的低分实际由 `cache.py` 肢体索引映射 bug 导致，而非训练流程 bug。E7 的结果（0.9675）与官方 checkpoint（0.9666）一致，仍可作为训练/评估流程正确的证据。
 
 ## 2. 目标
 在 24 个 MoBInd official test 序列上，使用 MoBInd 官方默认配置（5 IMU、100 帧窗口）重新训练 Stage1 + Stage2，并计算 synchronous FrameAcc，与官方 checkpoint（0.9666）对比。
