@@ -1,68 +1,53 @@
 # 🔄 HAROS Task Resume Node
 
 ## 1. 当前所处阶段 (Current Stage)
-* **实验期:** G4:mobind_single_imu_adaptation — **新目标：探索 MoBInd 单 IMU 最优适配方案**。
+* **实验期:** G4:mobind_single_imu_adaptation — **E11: Dual IMU Embedding（local + global）分别训练再融合 — 已完成，A8 统计显著性检验已完成**。
 * **上一阶段收尾:** G_egohumans — E6 cache bug 已修复，结果已反转；G3/E2 换 seed 复现完成，显示 custom 上单 IMU MoBInd seed 方差极大。
 * **当前具体执行任务:**
-  - ✅ G4 目录与 HAROS 文件已初始化（formulation / survey / ideas / plan / E1）。
-  - 🔄 E1: 整理 w24/w100 6-seed 基线结果，建立统一评估框架。
-* **当前具体执行任务:**
-  - ✅ E9（MoBInd 5 IMU / 24 帧窗口）已完成，FrameAcc = **0.9641**。
-  - ✅ E6-correct（MoBInd 单 IMU / 24 帧，cache bug 修复后）已完成，FrameAcc = **0.9548**。
-* **当前子任务状态:**
-  - ✅ E6-correct：MoBInd 单 IMU / 24 帧 = **0.9548**（cache bug 修复后，valid）。
-  - ❌ E6-original：0.4393（受 cache bug 影响，已废弃）。
-  - ❌ E6-aligned：0.4556（仍受 cache bug 影响，已废弃）。
-  - ✅ E7：MoBInd 5 IMU / 100 帧 = 0.9675
-  - ✅ E8：MoBInd 单 IMU / 100 帧 = 0.9616
-  - ✅ E9：MoBInd 5 IMU / 24 帧 = 0.9641
-  - ✅ G3/E1：Autism pipeline 全 IMU / 自提取骨架 / 24 帧 = 0.942
-  - ✅ G3/E1：Autism pipeline 单 IMU / 自提取骨架 / 24 帧 = 0.677
+  - ✅ G4 目录与 HAROS 文件已初始化（formulation / survey / ideas / plan / E1 / E11 / A6 / A8）。
+  - ✅ E1: 6-seed 基线已整理完成（w24 0.673±0.182，w100 0.659±0.130）。
+  - ✅ E11-A1/A2: w24/w100 Model-G 训练与评估完成。
+  - ✅ E11-A3/A4: 双模型融合与聚合完成，`results/results.md` 已生成。
+  - ✅ E11-A6/A7/A8: per-frame 可视化与统计检验完成，`results/per_frame_analysis.md` 与 `vis/per_frame_analysis/` 已生成。
+  - ⏳ 等待人类决策：是否提交 Git、是否更新 SOTA、是否继续 E12/E13。
 
 ## 2. 最终结果与结论
-### MoBInd 控制变量（窗口 vs IMU 数量，修正后）
-| 实验 | IMU | 窗口 | FrameAcc | 备注 |
-|---|---|---|---|---|
-| E6-correct | 1 IMU | 24 帧 | **0.9548** | ✅ cache bug 修复后 |
-| E9 | 5 IMU | 24 帧 | **0.9641** | — |
-| E8 | 1 IMU | 100 帧 | **0.9616** | — |
-| E7 | 5 IMU | 100 帧 | **0.9675** | — |
-
-- **原始 E6 低性能完全由 cache bug 导致**，并非“单 IMU + 24 帧不可行”。
-- 修正后，MoBInd 在四种配置下均接近 0.96，说明其对窗口长度和 IMU 数量均高度鲁棒（在同关节 IMU↔pose 匹配任务上）。
-- 单 IMU / 24 帧（0.9548）与 5 IMU / 24 帧（0.9641）仅差 **0.9 pp**；与单 IMU / 100 帧（0.9616）仅差 **0.7 pp**。
-- **重要限制**：E6/E8 中 MoBInd 的 `num_limbs=1` 同时把视频侧 motion 限制为同一个肢体，做的是“同关节 IMU ↔ pose”匹配，而非真正的“单 IMU + 全视频”匹配。
-
-### MoBInd vs Autism-project pipeline（24 帧窗口）
-| 方法 | IMU | FrameAcc |
+### E11 w24 结果（6 seeds, sim_norm=none）
+| 方法 | Mean FrameAcc | Std |
 |---|---|---|
-| MoBInd（E9） | 5 IMU | **0.9641** |
-| MoBInd（E6-correct） | 1 IMU | **0.9548** |
-| Autism pipeline | 全 IMU（4） | **0.942** |
-| Autism pipeline | 单 IMU（R_LowArm） | **0.677** |
+| Model-L (local) | 0.673 | 0.183 |
+| Model-G (global) | 0.664 | 0.090 |
+| Fusion α=0.5 | 0.709 | 0.124 |
+| **Fusion best α** | **0.752** | **0.095** |
 
-- MoBInd 单 IMU / 24 帧即可超过 Autism pipeline 全 IMU / 24 帧。
-- MoBInd 对 IMU 数量的敏感度远低于 Autism pipeline：
-  - MoBInd 5 IMU → 1 IMU：-0.9 pp
-  - Autism 4 IMU → 1 IMU：-26.5 pp
+### E11 w100 结果（6 seeds, sim_norm=none）
+| 方法 | Mean FrameAcc | Std |
+|---|---|---|
+| Model-L (local) | 0.659 | 0.130 |
+| Model-G (global) | 0.641 | 0.196 |
+| Fusion α=0.5 | 0.675 | 0.135 |
+| **Fusion best α** | **0.723** | **0.124** |
 
-## 3. 根因记录
-- 文件：`experiments/G_egohumans/E6:fair_single_imu_same_window/diagnosis.md`
-- 核心 bug：`preprocess/EgoHumans/cache.py` 用 `enumerate(limb_list)` 索引 `imu_data`。当 `limb_list = ["RightWrist"]` 时，实际保存的是 `imu_data[:, 0]`（`LeftWrist`），但文件名为 `RightWrist`。
-- 修复：在 `cache.py` 中加入固定肢体顺序映射，按名称取索引。
-- 重新生成 cache 后，前 10 窗口与 raw 数据 max diff = 0.0。
+### A8 统计显著性检验结论（90,330 有效帧）
+- **Local 与 Global 错误显著正相关，而非独立**：
+  - w24: χ² = 13,993.74, p ≈ 0；w100: χ² = 18,546.71, p ≈ 0。
+- **实际互补帧比例低于独立随机期望**：
+  - w24: L-only 14.3% vs 期望 22.8%（比值 0.63）；G-only 12.8% vs 期望 21.3%（比值 0.60）。
+  - w100: L-only 13.4% vs 期望 23.4%（比值 0.57）；G-only 11.8% vs 期望 21.8%（比值 0.54）。
+- **但 L-only / G-only 帧具有显著时序结构**：
+  - w24: L-only 平均连续段 39.2 帧，G-only 30.1 帧（随机 baseline ~1.16 帧）。
+  - w100: L-only 23.4 帧，G-only 35.8 帧（随机 baseline ~1.15 帧）。
+- **Fusion 仍然可靠地 rescue 了大部分单一模型错误帧**：
+  - w24: 27.1% 的帧通过融合从单一模型错误变为正确；w100: 25.2%。
+  - 极少出现单一模型对但 Fusion 错的情况（~1.4–1.7%）。
 
-## 4. 当前阻塞痛点 (Blockers & Issues)
+**综合判断**：Fusion 的收益是真实的，但 Local 与 Global 的互补性被高估——它们的错误模式高度相关，导致“只有一个模型对”的帧比理想独立专家少约 40–45%。Fusion 的上限因此受限，未来需要关注如何处理两者共同失败的片段。
+
+## 3. 当前阻塞痛点 (Blockers & Issues)
 * 无阻塞。
-* 历史错误结果（E6-original / E6-aligned）已在 `control_variable_summary.md/json` 中标记为 `invalidated`。
+* 注意：当前 `.log/resume.md`、E11 `progress.md`、E11 `results/*.md`、E11 `vis/per_frame_analysis/`、E11 w100 配置文件均为未提交修改（`experiments/` 与 `vis/` 在 `.gitignore` 中，仅 `.log/resume.md` 会被 Git 追踪）。
 
-## 5. 下一步行动 (Next Actions)
-### G4 当前
-* [ ] 完成 E1 baseline 结果整理（6 seeds 汇总、results.md、可视化）。
-* [ ] 创建 E1 一键评估脚本 `scripts/eval_all_seeds.sh`。
-* [ ] 人类确认 G4 路线图中优先验证的假设（建议优先 I1：单 IMU + 全骨架）。
-
-### 历史待办
-* [x] 检查 `MoBind/configs/config.py` 已恢复为 5-limb。
-* [x] 清理旧 cache 与错误 Stage1/Stage2 checkpoint。
-* [ ] 更新 Autism-project 主 README / 论文表格中的 E6 数值与结论。
+## 4. 下一步行动 (Next Actions)
+* [ ] 人类决策：是否将当前 `.log/resume.md` 提交 Git Commit。
+* [ ] 人类决策：是否将 w24 Fusion best α（0.752 ± 0.095）更新为项目 SOTA。
+* [ ] 人类决策：是否继续推进 E12（课程式 local→global 训练）或 E13（自适应 local/global 门控）。
