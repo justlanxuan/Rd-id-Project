@@ -9,7 +9,8 @@
   - ✅ E11-A1/A2: w24/w100 Model-G 训练与评估完成。
   - ✅ E11-A3/A4: 双模型融合与聚合完成，`results/results.md` 已生成。
   - ✅ E11-A6/A7/A8: per-frame 可视化与统计检验完成，`results/per_frame_analysis.md` 与 `vis/per_frame_analysis/` 已生成。
-  - ⏳ 等待人类决策：是否提交 Git、是否更新 SOTA、是否继续 E12/E13。
+  - ✅ 已按人类指令提交 Git（resume + SOTA）。
+  - ⏳ 等待人类决策：是否继续 E12/E13。
 
 ## 2. 最终结果与结论
 ### E11 w24 结果（6 seeds, sim_norm=none）
@@ -45,9 +46,9 @@
 
 ## 3. 当前阻塞痛点 (Blockers & Issues)
 * 无阻塞。
-* 注意：当前 `.log/resume.md`、E11 `progress.md`、E11 `results/*.md`、E11 `vis/per_frame_analysis/`、E11 w100 配置文件均为未提交修改（`experiments/` 与 `vis/` 在 `.gitignore` 中，仅 `.log/resume.md` 会被 Git 追踪）。
+* 注意：`.log/resume.md` 与 `experiments/SOTA_reproduce.md` 已提交至 Git；E11 `progress.md`、E11 `results/*.md`、E11 `vis/per_frame_analysis/` 仍在 `.gitignore` 中，未进入 Git。
 
 ## 4. 下一步行动 (Next Actions)
-* [ ] 人类决策：是否将当前 `.log/resume.md` 提交 Git Commit。
-* [ ] 人类决策：是否将 w24 Fusion best α（0.752 ± 0.095）更新为项目 SOTA。
+* [x] 将当前 `.log/resume.md` 提交 Git Commit（Commit: `4e676a4`）。
+* [x] 将 w24 Fusion best α（0.752 ± 0.095）更新到 `experiments/SOTA_reproduce.md`（Commit: `dd61608`）。
 * [ ] 人类决策：是否继续推进 E12（课程式 local→global 训练）或 E13（自适应 local/global 门控）。
