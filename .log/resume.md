@@ -9,7 +9,8 @@
   - ✅ A1: EgoHumans cache 已构建（`cache_action_1.2_0.5`，21,179 windows）。
   - ✅ A3: Source Model-G seed0 已完成（Stage2 val ~0.63）。
   - 🔄 A3: Source Model-G seeds 42/123/1 训练中。
-  - 🔄 A2: Source Model-L seed0 训练中（Stage2 val ~0.64）。
+  - ✅ A2: Source Model-L seed0 已完成（Stage2 val ~0.64）。
+  - 🔄 A2: Source Model-L seed42 训练中。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）
