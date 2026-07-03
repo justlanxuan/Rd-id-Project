@@ -31,7 +31,7 @@
 
 ## 2. 代码与资产锚点 (Code & Artifacts Anchor)
 * **Git 仓库状态 (Strictly Clean):**
-  * **Commit ID:** `4e676a4`
+  * **Commit ID:** `dd61608`
   * **活跃分支 (Branch):** `egohumans`
 * **依赖的权重文件 (Model Checkpoint):**
   * **Model-L（Local）检查点：** `experiments/G3:custom_failure_diagnosis/E2:mobind_on_custom_same_split/artifacts/w24_seed*/stage2/Custom/*/best.pt`
@@ -193,7 +193,7 @@ imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
 ```bash
 # 1. 切换并对齐绝对干净的代码现场
 git checkout egohumans
-git reset --hard 4e676a4
+git reset --hard dd61608
 
 # 2. 激活环境
 conda activate mobind_repro
