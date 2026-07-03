@@ -16,8 +16,8 @@
 
 ## 训练状态
 
-- `source_w24_seed0_local`: Stage1 运行中，约 epoch 27，val R@1 ~0.18。
-- `source_w24_seed0_global`: Stage1 刚启动。
+- `source_w24_seed0_local`: Stage1 重新启动（之前 background task 300s 超时被杀），使用 4h timeout 运行中。
+- `source_w24_seed0_global`: Stage1 重新启动（之前 background task 300s 超时被杀），使用 4h timeout 运行中。
 
 ## 下一步
 

@@ -7,7 +7,7 @@
   - ✅ G5 goal 已初始化（formulation / survey / ideas / plan / progress）。
   - ✅ E1 实验目录已创建（formulation / plan / progress / scripts / configs）。
   - ✅ A1: EgoHumans cache 已构建（`cache_action_1.2_0.5`，21,179 windows）。
-  - 🔄 A2/A3: Source Model-L / Model-G seed0 训练中，验证 pipeline。
+  - 🔄 A2/A3: Source Model-L / Model-G seed0 重新启动后训练中（background 4h timeout）。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）
@@ -50,7 +50,7 @@
 * 注意：`.log/resume.md` 与 `experiments/SOTA_reproduce.md` 已提交至 Git；G5/E1 文档在 `experiments/` 目录下，按 `.gitignore` 不进入 Git，但本次通过 `git add -f` 可显式提交 goal 级文档。
 
 ## 4. 下一步行动 (Next Actions)
-* [x] G5 goal 文档已提交 Git（Commit: `b4cc938`）。
+* [x] G5 goal 文档已提交 Git（Commit: `d10055c`）。
 * [x] E1-A1 EgoHumans cache 已构建完成。
 * [🔄] E1-A2/A3 source 训练 seed0 验证中。
 * [ ] 待 seed0 成功后，扩展至 6 seeds 并行训练。
