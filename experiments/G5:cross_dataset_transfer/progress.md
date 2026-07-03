@@ -2,22 +2,17 @@
 
 ## 当前状态
 
-- [x] G5 formulation / survey / ideas / plan 已创建。
-- [ ] E1 实验尚未开始。
+- [x] G5 goal 已初始化。
+- [x] E1 实验已启动。
+- [x] A1 EgoHumans cache 已构建完成。
+- [🔄] A2/A3 source 训练 seed0 验证中。
 
-## 已完成
+## 最近更新
 
-- 2026-07-03: 初始化 G5 goal 与 E1 实验目录结构。
+- 2026-07-03: 启动 E1，构建 EgoHumans cache，开始 source Model-L / Model-G seed0 训练。
 
 ## 待办
 
-1. 检查 EgoHumans 上 dual-embedding 所需 cache 是否存在。
-2. 编写 E1-A1 数据准备脚本。
-3. 编写 E1-A2 源域训练脚本（Model-L + Model-G）。
-4. 编写 E1-A3 源域融合评估脚本。
-5. 编写 E1-A4/A5/A6 目标域迁移脚本。
-6. 运行实验并汇总结果。
-
-## 阻塞
-
-- 无。
+1. 验证 seed0 source 训练成功。
+2. 扩展至 6 seeds source 训练。
+3. 执行 zero-shot / fine-tune / 结果聚合。

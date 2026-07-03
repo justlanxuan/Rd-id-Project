@@ -1,0 +1,72 @@
+# ========== Experiment identity ==========
+experiment:
+  name: "stage1"
+  seed: {{SEED}}
+  output_dir: "{{OUTPUT_DIR}}"
+  precision: "amp"
+
+# ==========  Logging ==========
+wandb:
+  enabled: false
+  project: "MoBind"
+  config:
+    experiment: ${experiment}
+    data: ${data}
+    model: ${model}
+    optimizer: ${optimizer}
+    training: ${training}
+    distributed: ${distributed}
+
+# ==========  Data ==========
+data:
+  root_dir: "{{DATA_ROOT}}"
+  window_sec: 1.2
+  stride_sec: 0.5
+  split: action
+  imu_srate: 20
+  motion_srate: 20
+  motion_type: "wjoint"
+  multi_sensor: false
+  limb_list: [RightWrist]
+  dataset_name: EgoHumans
+  drop_sensors: false
+
+  loader:
+    batch_size: 256
+    num_workers: 4
+    pin_memory: true
+
+
+# ==========  Model ==========
+model:
+  imu_encoder: "conv_former"
+  imu_channels: 7
+  motion_encoder: "conv_former"
+  motion_channels: 6
+  num_blocks: 4
+  num_heads: 8
+  patch_sec: 0.3
+  embedding_size: 256
+
+# ==========  Optimiser ==========
+optimizer:
+  opt: "adam"
+  lr: 1e-4
+  weight_decay: 1e-4
+
+# ==========  Training loop ==========
+training:
+  epochs: 10000
+  log_interval: 25
+  val_interval: 1
+  local_weight: 0.5
+  global_weight: 1.0
+  early_stopping:
+    patience: 200
+    min_delta: 0.001
+    mode: "max"
+
+# ==========  Hardware / distributed ==========
+distributed:
+  backend: "nccl"
+  gpus: [0]

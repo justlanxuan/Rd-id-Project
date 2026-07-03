@@ -5,8 +5,9 @@
 * **上一阶段收尾:** G4:mobind_single_imu_adaptation — E11 dual-embedding 完成，A8 统计检验完成，SOTA 已更新为 w24 Fusion best α 0.752 ± 0.095（Commit: `dd61608`）。
 * **当前具体执行任务:**
   - ✅ G5 goal 已初始化（formulation / survey / ideas / plan / progress）。
-  - ✅ E1 实验目录已创建（formulation / plan / progress / scripts README）。
-  - ⏳ 等待人类决策：是否立即开始 E1-A1 数据准备，或调整实验设计。
+  - ✅ E1 实验目录已创建（formulation / plan / progress / scripts / configs）。
+  - ✅ A1: EgoHumans cache 已构建（`cache_action_1.2_0.5`，21,179 windows）。
+  - 🔄 A2/A3: Source Model-L / Model-G seed0 训练中，验证 pipeline。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）
@@ -49,6 +50,7 @@
 * 注意：`.log/resume.md` 与 `experiments/SOTA_reproduce.md` 已提交至 Git；G5/E1 文档在 `experiments/` 目录下，按 `.gitignore` 不进入 Git，但本次通过 `git add -f` 可显式提交 goal 级文档。
 
 ## 4. 下一步行动 (Next Actions)
-* [ ] 人类决策：是否将 G5 goal 文档提交 Git（使 formulation/plan 等可被版本控制）。
-* [ ] 人类决策：是否立即开始 E1-A1（检查/构建 EgoHumans local + global cache）。
-* [ ] 人类决策：是否需要调整 G5/E1 的实验设计（例如先做 single-branch 迁移再做 dual）。
+* [x] G5 goal 文档已提交 Git（Commit: `b4cc938`）。
+* [x] E1-A1 EgoHumans cache 已构建完成。
+* [🔄] E1-A2/A3 source 训练 seed0 验证中。
+* [ ] 待 seed0 成功后，扩展至 6 seeds 并行训练。
