@@ -7,11 +7,10 @@
   - ✅ G5 goal 已初始化（formulation / survey / ideas / plan / progress）。
   - ✅ E1 实验目录已创建（formulation / plan / progress / scripts / configs）。
   - ✅ A1: EgoHumans cache 已构建（`cache_action_1.2_0.5`，21,179 windows）。
-  - ✅ A3: Source Model-G seed0 已完成（Stage2 val ~0.63）。
-  - 🔄 A3: Source Model-G seeds 42/123/1 训练中。
-  - ✅ A2: Source Model-L seed0 已完成（Stage2 val ~0.64）。
-  - 🔄 A2: Source Model-L seed42 训练中。
-  - ✅ A5: Seed0 zero-shot 完成：Mean FrameAcc = **0.2940**（best α=1.0，即 pure Local 最优；Global 分支反而有害）。
+  - ✅ A3: Source Model-G seeds 0/1 已完成；seeds 42/123 训练中。
+  - ✅ A2: Source Model-L seed0 已完成；seed42 训练中。
+  - ✅ A5: Seed0 zero-shot 完成：Mean FrameAcc = **0.2940**（best α=1.0，pure Local 最优）。
+  - 🔄 A6: Seed0 Local fine-tune 已启动（GPU 7）。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）

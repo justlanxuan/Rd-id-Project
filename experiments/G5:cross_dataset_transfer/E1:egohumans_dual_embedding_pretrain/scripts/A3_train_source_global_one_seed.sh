@@ -38,6 +38,7 @@ if [[ -z "$STAGE1_EXP" ]]; then
   exit 1
 fi
 echo "[Stage1] Output: $STAGE1_EXP"
+echo "$STAGE1_EXP" > "$SEED_OUT/stage1_exp_path.txt"
 
 # ---------- Stage 2 ----------
 STAGE2_CFG="$SEED_OUT/stage2.yaml"
