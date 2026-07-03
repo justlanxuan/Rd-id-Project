@@ -11,6 +11,7 @@
   - 🔄 A3: Source Model-G seeds 42/123/1 训练中。
   - ✅ A2: Source Model-L seed0 已完成（Stage2 val ~0.64）。
   - 🔄 A2: Source Model-L seed42 训练中。
+  - ✅ A5: Seed0 zero-shot 完成：Mean FrameAcc = **0.2940**（best α=1.0，即 pure Local 最优；Global 分支反而有害）。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）

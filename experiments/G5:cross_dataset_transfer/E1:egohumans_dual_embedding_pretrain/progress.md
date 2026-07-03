@@ -13,7 +13,8 @@
 - [ ] A3: Source Model-G seeds 2/3 待启动。
 - [ ] A2: Source Model-L seeds 42/123/1/2/3 待启动。
 - [ ] A4: 源域融合评估待训练完成后执行。
-- [ ] A5: target zero-shot 待训练完成后执行。
+- [x] A5: target zero-shot **seed0 已完成**：Mean FrameAcc = 0.2940（best α=1.0，pure local）。
+- [ ] A5: target zero-shot 剩余 seeds 待 source 训练完成后执行。
 - [ ] A6: target fine-tune 待 zero-shot 完成后执行。
 - [ ] A8: 结果聚合待所有实验完成后执行。
 
