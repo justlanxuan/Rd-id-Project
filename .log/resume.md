@@ -7,7 +7,9 @@
   - ✅ G5 goal 已初始化（formulation / survey / ideas / plan / progress）。
   - ✅ E1 实验目录已创建（formulation / plan / progress / scripts / configs）。
   - ✅ A1: EgoHumans cache 已构建（`cache_action_1.2_0.5`，21,179 windows）。
-  - 🔄 A2/A3: Source Model-L / Model-G seed0 重新启动后训练中（background 4h timeout）。
+  - ✅ A3: Source Model-G seed0 已完成（Stage2 val ~0.63）。
+  - 🔄 A3: Source Model-G seeds 42/123/1 训练中。
+  - 🔄 A2: Source Model-L seed0 训练中（Stage2 val ~0.64）。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）
