@@ -10,8 +10,10 @@
   - ✅ A3: Source Model-G seeds 0/1 已完成；seeds 42/123 训练中。
   - ✅ A2: Source Model-L seed0 已完成；seed42 训练中。
   - ✅ A5: Seed0 zero-shot 完成：Mean FrameAcc = **0.2940**。
-  - ✅ A6: Seed0 Local fine-tune 完成：Mean FrameAcc = **0.7259**（接近 from-scratch 0.752）。
-  - 🔄 A6: Seed0 Global fine-tune 运行中（GPU 7）。
+  - ✅ A6: Seed0 Local fine-tune 完成：Mean FrameAcc = **0.7259**。
+  - ✅ A6: Seed0 Global fine-tune 完成。
+  - ✅ A6: Seed0 Fusion (local+global fine-tuned) 完成：Mean FrameAcc = **0.7332**（best α=0.9，接近 from-scratch 0.752）。
+  - 🔄 A2: Source Model-L seed1 训练中（GPU 7）。
 
 ## 2. 最终结果与结论
 ### G4/E11 w24 结果（6 seeds, sim_norm=none）
