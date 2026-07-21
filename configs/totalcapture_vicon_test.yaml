@@ -7,10 +7,8 @@ preprocess:
   dataset: totalcapture
   raw_root: /data/fzliang/totalcapture
   camera: cam1
-  output: ./data/interim/video_manifest.csv
 
 slice:
-  root: /data/fzliang/totalcapture
   window_len: 24
   stride: 16
   sensor_order: [L_LowLeg, R_LowLeg, L_LowArm, R_LowArm]
@@ -20,11 +18,6 @@ slice:
   max_sequences: 3
 
 train:
-  model:
-    motionbert_root: /home/fzliang/MotionBERT
-    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
-    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
-    imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
   epochs: 2
   batch_size: 32
   num_workers: 4
@@ -34,10 +27,13 @@ train:
 
 test:
   batch_size: 32
-  grouped_test:
-    enabled: true
-    group_sizes: "2,4"
-    num_trials: 5
-    chunk_windows: 30
-    min_chunk_windows: 15
-    seed: 42
+  metrics:
+    frame_acc:
+      enabled: true
+    group_test:
+      enabled: true
+      group_sizes: "2,4"
+      num_trials: 5
+      chunk_windows: 30
+      min_chunk_windows: 15
+      seed: 42

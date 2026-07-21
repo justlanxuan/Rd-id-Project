@@ -7,10 +7,12 @@ export PYTHONPATH="${PWD}:${PWD}/src"
 
 CONFIG="${1:-configs/totalcapture_vicon_test.yaml}"
 STAGE="${2:-all}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
 
 echo "Config: $CONFIG"
-echo "Stage: $STAGE"
+echo "Stages: $STAGE"
+echo "Python: $PYTHON_BIN"
 
-python -m src.pipelines --config "$CONFIG" --stages "$STAGE"
+"$PYTHON_BIN" -m src.pipeline --config "$CONFIG" --stages "$STAGE"
 
 echo "=== Done ==="

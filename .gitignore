@@ -12,3 +12,8 @@ experiments/
 experiments/synthetic_imu_matching/*.json
 experiments/synthetic_imu_matching/__pycache__
 experiments/synthetic_imu_matching/*.npz
+
+.log/
+.runbook/
+__pycache__/
+*.py[cod]

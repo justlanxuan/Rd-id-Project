@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 
 from src.core.registry import POSE_ESTIMATORS
-from src.data.structures import Pose, Track
+from src.preprocess.structures import Pose, Track
 from src.modules.pose_estimators.base import BasePoseEstimator
 
 
@@ -413,9 +413,14 @@ class AlphaPoseSPPE(BasePoseEstimator):
             p for p in _env.get("PYTHONPATH", "").split(os.pathsep)
             if p and "Autism-project" not in p
         ]
-        _env["PYTHONPATH"] = str(self.repo_path)
+        alphapose_paths = [
+            str(self.repo_path),
+            str(self.repo_path / "trackers"),
+            str(self.repo_path / "detector" / "tracker"),
+        ]
+        _env["PYTHONPATH"] = os.pathsep.join(alphapose_paths)
         if filtered_paths:
-            _env["PYTHONPATH"] = f"{self.repo_path}{os.pathsep}{os.pathsep.join(filtered_paths)}"
+            _env["PYTHONPATH"] = f"{_env['PYTHONPATH']}{os.pathsep}{os.pathsep.join(filtered_paths)}"
         if self.config.gpu is not None:
             _env["CUDA_VISIBLE_DEVICES"] = str(self.config.gpu)
         else:

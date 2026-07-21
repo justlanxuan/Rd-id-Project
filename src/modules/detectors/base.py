@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 
-from src.data.structures import Detection
+from src.preprocess.structures import Detection
 
 
 class BaseDetector(ABC):

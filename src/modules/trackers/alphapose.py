@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from src.core.registry import TRACKERS
-from src.data.structures import Detection, Track
+from src.preprocess.structures import Detection, Track
 from src.modules.trackers.base import BaseTracker
 
 

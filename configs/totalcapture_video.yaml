@@ -12,7 +12,6 @@ extract:
   detector: bytetrack
   tracker: bytetrack
   pose_estimator: alphapose
-  manifest_csv: ./data/interim/video_manifest.csv
   limit: 0
   skip_existing: true
   gpu: 0
@@ -35,11 +34,6 @@ slice:
   max_sequences: 0
 
 train:
-  model:
-    motionbert_root: /home/fzliang/origin/MotionBERT
-    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
-    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
-    imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
   epochs: 200
   batch_size: 64
   num_workers: 8
@@ -51,11 +45,14 @@ train:
 
 test:
   batch_size: 64
-  grouped_test:
-    enabled: true
-    per_subject_split: true
-    group_sizes: "2,4,6,8,16"
-    num_trials: 200
-    chunk_windows: 30
-    min_chunk_windows: 15
-    seed: 42
+  metrics:
+    frame_acc:
+      enabled: true
+    group_test:
+      enabled: true
+      per_subject_split: true
+      group_sizes: "2,4,6,8,16"
+      num_trials: 200
+      chunk_windows: 30
+      min_chunk_windows: 15
+      seed: 42

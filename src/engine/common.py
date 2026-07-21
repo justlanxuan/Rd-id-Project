@@ -2,154 +2,140 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 import torch
 
-from src.modules.encoders import (
-    IMUEncoder, PhysicsIMUEncoder, VideoEncoder,
-    GlobalMotionEncoder, GlobalVideoEncoder,
-)
-from src.modules.encoders.utils import (
-    build_motionbert_backbone,
-    load_motionbert_checkpoint,
-    load_despite_imu_weights,
-)
-from src.modules.matchers import IMUVideoMatcher, GlobalIMUVideoMatcher, SymmetricInfoNCE
+from src.config import get_cfg_defaults
+from src.modules.encoders import HybridIMUEncoder, HybridSkeletonEncoder
+from src.modules.matchers import IMUVideoMatcher, SymmetricInfoNCE
+
+
+def _adapt_legacy_hybrid_state_dict(state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Map legacy hybrid experiment checkpoint keys to production matcher keys."""
+    adapted: Dict[str, torch.Tensor] = {}
+    for key, value in state.items():
+        if key == "log_temp":
+            continue
+        if key.startswith("skel."):
+            adapted[f"video_encoder.{key[len('skel.'):]}"] = value
+        elif key.startswith("imu."):
+            adapted[f"imu_encoder.raw.{key[len('imu.'):]}"] = value
+        else:
+            adapted[key] = value
+    return adapted
+
+
+def _load_init_checkpoint(model: IMUVideoMatcher, checkpoint: str) -> None:
+    init_path = Path(checkpoint).expanduser()
+    if not init_path.exists():
+        raise FileNotFoundError(f"INIT_ALIGNMENT_CKPT not found: {init_path}")
+    raw = torch.load(str(init_path), map_location="cpu")
+    init_state = raw["model"] if isinstance(raw, dict) and "model" in raw else raw
+    init_state = _adapt_legacy_hybrid_state_dict(init_state)
+    if isinstance(raw, dict) and isinstance(raw.get("stats"), dict):
+        stats = raw["stats"]
+        stat_map = {
+            "raw_mu": "video_encoder.raw_mu",
+            "raw_sd": "video_encoder.raw_sd",
+            "vec_mu": "video_encoder.vec_mu",
+            "vec_sd": "video_encoder.vec_sd",
+            "imu_mu": "imu_encoder.imu_mu",
+            "imu_sd": "imu_encoder.imu_sd",
+        }
+        for src_key, dst_key in stat_map.items():
+            if src_key in stats:
+                init_state[dst_key] = torch.as_tensor(stats[src_key], dtype=torch.float32)
+    model_state = model.state_dict()
+    init_state = {
+        key: value
+        for key, value in init_state.items()
+        if key in model_state and tuple(model_state[key].shape) == tuple(value.shape)
+    }
+    missing, unexpected = model.load_state_dict(init_state, strict=False)
+    print(
+        f"Loaded INIT_ALIGNMENT_CKPT: {init_path} "
+        f"(missing={len(missing)}, unexpected={len(unexpected)})"
+    )
+
+
+def build_alignment_model_from_cfg(
+    cfg: Any,
+    device: torch.device,
+) -> Tuple[IMUVideoMatcher, str]:
+    """Build the official hybrid IMU-video alignment model."""
+    model_cfg = cfg.TRAIN.MODEL
+    model_type = str(getattr(model_cfg, "TYPE", "hybrid")).lower()
+    if model_type != "hybrid":
+        raise ValueError(
+            f"Unsupported TRAIN.MODEL.TYPE={model_cfg.TYPE!r}. "
+            "The production codebase currently supports only the hybrid encoder."
+        )
+
+    hidden = int(model_cfg.HYBRID_HIDDEN)
+    imu_encoder = HybridIMUEncoder(
+        hidden_size=hidden,
+        imu_smooth_kernel=int(model_cfg.HYBRID_IMU_SMOOTH),
+        feature_mode=str(model_cfg.HYBRID_IMU_FEATURE_MODE),
+        temporal_layers=int(model_cfg.HYBRID_TEMPORAL_LAYERS),
+        temporal_kernel=int(model_cfg.HYBRID_TEMPORAL_KERNEL),
+        temporal_mode=str(model_cfg.HYBRID_TEMPORAL_MODE),
+        dropout=float(model_cfg.HYBRID_DROPOUT),
+    )
+    video_encoder = HybridSkeletonEncoder(
+        hidden_size=hidden,
+        skeleton_smooth_kernel=int(model_cfg.HYBRID_SKELETON_SMOOTH),
+        image_height=float(model_cfg.HYBRID_IMAGE_HEIGHT),
+        image_width=float(model_cfg.HYBRID_IMAGE_WIDTH),
+        token_layers=int(model_cfg.HYBRID_TOKEN_LAYERS),
+        token_heads=int(model_cfg.HYBRID_TOKEN_HEADS),
+        temporal_layers=int(model_cfg.HYBRID_TEMPORAL_LAYERS),
+        temporal_kernel=int(model_cfg.HYBRID_TEMPORAL_KERNEL),
+        temporal_mode=str(model_cfg.HYBRID_TEMPORAL_MODE),
+        feature_mode=str(model_cfg.HYBRID_SKELETON_FEATURE_MODE),
+        dropout=float(model_cfg.HYBRID_DROPOUT),
+    )
+    model = IMUVideoMatcher(
+        imu_encoder=imu_encoder,
+        video_encoder=video_encoder,
+        num_domains=int(model_cfg.NUM_DOMAINS),
+        domain_hidden_dim=int(model_cfg.DOMAIN_HIDDEN_DIM),
+        pair_head=bool(model_cfg.PAIR_HEAD),
+        pair_hidden_dim=int(model_cfg.PAIR_HIDDEN_DIM),
+        cross_pair_head=bool(model_cfg.CROSS_PAIR_HEAD),
+        cross_pair_hidden_dim=int(model_cfg.CROSS_PAIR_HIDDEN_DIM),
+    ).to(device)
+
+    if model_cfg.INIT_ALIGNMENT_CKPT:
+        _load_init_checkpoint(model, str(model_cfg.INIT_ALIGNMENT_CKPT))
+    return model, "hybrid"
 
 
 def build_alignment_model(
     args: Any,
     device: torch.device,
-    embed_dim: int = 512,
+    embed_dim: int = 128,
 ) -> Tuple[IMUVideoMatcher, str]:
-    """Build IMU-Video alignment model from CLI/config args.
-
-    Returns:
-        model: Assembled IMUVideoMatcher on device
-        cfg_name: MotionBERT config name for logging
-    """
-    motionbert_root = Path(args.motionbert_root).expanduser().resolve()
-    if str(motionbert_root) not in sys.path:
-        sys.path.insert(0, str(motionbert_root))
-
-    config_path = Path(args.motionbert_config)
-    if not config_path.is_absolute():
-        config_path = motionbert_root / config_path
-
-    ckpt_path = Path(args.motionbert_ckpt) if getattr(args, "motionbert_ckpt", "") else None
-    if ckpt_path is not None and not ckpt_path.is_absolute():
-        ckpt_path = motionbert_root / ckpt_path
-
-    backbone, cfg = build_motionbert_backbone(str(config_path))
-    skip_motionbert_ckpt = getattr(args, "skip_motionbert_ckpt", False)
-    if not skip_motionbert_ckpt:
-        if ckpt_path is None:
-            raise ValueError("--motionbert_ckpt is required unless --skip_motionbert_ckpt is set.")
-        load_motionbert_checkpoint(backbone, str(ckpt_path), strict=True)
-    else:
-        print("[WARN] skip_motionbert_ckpt enabled: using randomly initialized MotionBERT backbone.")
-
-    imu_encoder_type = getattr(args, "imu_encoder_type", "lstm")
-    if imu_encoder_type == "physics":
-        imu_encoder = PhysicsIMUEncoder(
-            d_model=getattr(args, "physics_d_model", 128),
-            n_heads=getattr(args, "physics_n_heads", 4),
-            num_layers=getattr(args, "physics_num_layers", 3),
-            embed_dim=embed_dim,
-            fs_hz=getattr(args, "physics_fs_hz", 30.0),
-            n_fft=getattr(args, "physics_n_fft", 64),
-            dropout=getattr(args, "physics_dropout", 0.1),
-        )
-        print(f"[INFO] Using PhysicsIMUEncoder (d_model={getattr(args, 'physics_d_model', 128)}, "
-              f"layers={getattr(args, 'physics_num_layers', 3)})")
-    else:
-        adapter_type = getattr(args, "adapter_type", None)
-        imu_encoder = IMUEncoder(
-            input_size=48, hidden_size=embed_dim, num_layers=2,
-            device=str(device), adapter_type=adapter_type,
-        )
-        imu_ckpt = getattr(args, "imu_ckpt", "")
-        if imu_ckpt:
-            imu_ckpt_path = Path(imu_ckpt).expanduser()
-            if imu_ckpt_path.exists():
-                load_despite_imu_weights(imu_encoder, str(imu_ckpt_path), strict=False)
-            else:
-                print(f"[WARN] IMU checkpoint not found at {imu_ckpt_path}; using random init.")
-
-    use_global_motion = getattr(args, "use_global_motion", False)
-    if use_global_motion:
-        global_only_mode = bool(getattr(args, "global_motion_train_only", False))
-        local_encoder = VideoEncoder(backbone=backbone, rep_dim=embed_dim, temporal_layers=2)
-        global_encoder = GlobalMotionEncoder(
-            input_dim=getattr(args, "global_motion_input_dim", 2),
-            hidden_dim=getattr(args, "global_motion_hidden_dim", 64),
-            num_layers=getattr(args, "global_motion_num_layers", 2),
-            embed_dim=embed_dim,
-            dropout=getattr(args, "global_motion_dropout", 0.1),
-            input_type=getattr(args, "global_motion_input_type", "diff_raw"),
-            fusion_proj=True if global_only_mode else getattr(args, "global_motion_fusion_proj", True),
-        )
-        video_encoder = GlobalVideoEncoder(
-            local_encoder=local_encoder,
-            global_encoder=global_encoder,
-            embed_dim=embed_dim,
-            fusion_type=getattr(args, "global_motion_fusion_type", "concat"),
-        )
-        model = GlobalIMUVideoMatcher(imu_encoder=imu_encoder, video_encoder=video_encoder).to(device)
-        if global_only_mode:
-            model.global_only = True
-            for p in model.imu_encoder.parameters():
-                p.requires_grad = False
-            for p in model.video_encoder.local_encoder.parameters():
-                p.requires_grad = False
-            for p in model.video_encoder.fusion.parameters():
-                p.requires_grad = False
-            for p in model.video_encoder.global_encoder.parameters():
-                p.requires_grad = True
-        print(
-            f"[INFO] Global motion enabled: input_dim={global_encoder.input_dim}, "
-            f"hidden_dim={getattr(args, 'global_motion_hidden_dim', 64)}, "
-            f"fusion={getattr(args, 'global_motion_fusion_type', 'concat')}, "
-            f"global_only={getattr(args, 'global_motion_train_only', False)}"
-        )
-    else:
-        video_encoder = VideoEncoder(backbone=backbone, rep_dim=embed_dim, temporal_layers=2)
-        num_domains = getattr(args, "num_domains", 0)
-        domain_hidden_dim = getattr(args, "domain_hidden_dim", 256)
-        model = IMUVideoMatcher(
-            imu_encoder=imu_encoder,
-            video_encoder=video_encoder,
-            num_domains=num_domains,
-            domain_hidden_dim=domain_hidden_dim,
-        ).to(device)
-
-    init_alignment_ckpt = getattr(args, "init_alignment_ckpt", "")
-    if init_alignment_ckpt:
-        init_path = Path(init_alignment_ckpt).expanduser()
-        if not init_path.exists():
-            raise FileNotFoundError(f"init_alignment_ckpt not found: {init_path}")
-        raw = torch.load(str(init_path), map_location="cpu")
-        init_state = raw["model"] if isinstance(raw, dict) and "model" in raw else raw
-        missing, unexpected = model.load_state_dict(init_state, strict=False)
-        print(
-            f"Loaded init_alignment_ckpt: {init_path} "
-            f"(missing={len(missing)}, unexpected={len(unexpected)})"
-        )
-
-    return model, getattr(cfg, "name", "unknown")
+    """Compatibility wrapper for legacy scripts; still builds only hybrid."""
+    cfg = get_cfg_defaults()
+    cfg.defrost()
+    cfg.TRAIN.MODEL.TYPE = "hybrid"
+    cfg.TRAIN.MODEL.HYBRID_HIDDEN = int(getattr(args, "hybrid_hidden", embed_dim))
+    cfg.TRAIN.MODEL.NUM_DOMAINS = int(getattr(args, "num_domains", 0))
+    cfg.TRAIN.MODEL.DOMAIN_HIDDEN_DIM = int(getattr(args, "domain_hidden_dim", 256))
+    init_ckpt = str(getattr(args, "init_alignment_ckpt", "") or "")
+    if init_ckpt:
+        cfg.TRAIN.MODEL.INIT_ALIGNMENT_CKPT = init_ckpt
+    cfg.freeze()
+    return build_alignment_model_from_cfg(cfg, device)
 
 
 def _get_backbone_from_video_encoder(video_encoder):
-    """Extract backbone from VideoEncoder or GlobalVideoEncoder."""
-    if hasattr(video_encoder, "backbone"):
-        return video_encoder.backbone
-    elif hasattr(video_encoder, "local_encoder") and hasattr(video_encoder.local_encoder, "backbone"):
-        return video_encoder.local_encoder.backbone
-    else:
-        raise AttributeError(f"Cannot find backbone in {type(video_encoder).__name__}")
+    """Hybrid encoders do not expose a separately frozen backbone."""
+    if isinstance(video_encoder, HybridSkeletonEncoder):
+        return None
+    raise AttributeError(f"Unsupported video encoder: {type(video_encoder).__name__}")
 
 
 def build_optimizer(
@@ -158,30 +144,12 @@ def build_optimizer(
     lr_heads: float = 1e-4,
     weight_decay: float = 1e-4,
 ) -> torch.optim.Optimizer:
-    """Build AdamW optimizer with separate LRs for backbone and heads."""
-    backbone = _get_backbone_from_video_encoder(model.video_encoder)
-    backbone_params = [p for p in backbone.parameters() if p.requires_grad]
-    head_params = []
-    head_params += [p for p in model.imu_encoder.parameters() if p.requires_grad]
-    if hasattr(model.video_encoder, "joint_compress"):
-        head_params += [p for p in model.video_encoder.joint_compress.parameters() if p.requires_grad]
-        head_params += [p for p in model.video_encoder.temporal_lstm.parameters() if p.requires_grad]
-    elif hasattr(model.video_encoder, "local_encoder"):
-        head_params += [p for p in model.video_encoder.local_encoder.joint_compress.parameters() if p.requires_grad]
-        head_params += [p for p in model.video_encoder.local_encoder.temporal_lstm.parameters() if p.requires_grad]
-        head_params += [p for p in model.video_encoder.global_encoder.parameters() if p.requires_grad]
-        if hasattr(model.video_encoder, "fusion"):
-            head_params += [p for p in model.video_encoder.fusion.parameters() if p.requires_grad]
-        if hasattr(model.video_encoder, "film"):
-            head_params += [p for p in model.video_encoder.film.parameters() if p.requires_grad]
-
-    return torch.optim.AdamW(
-        [
-            {"params": backbone_params, "lr": lr_backbone},
-            {"params": head_params, "lr": lr_heads},
-        ],
-        weight_decay=weight_decay,
-    )
+    """Build AdamW for all trainable hybrid model parameters."""
+    del lr_backbone
+    params = [p for p in model.parameters() if p.requires_grad]
+    if not params:
+        raise ValueError("No trainable parameters found.")
+    return torch.optim.AdamW([{"params": params, "lr": lr_heads}], weight_decay=weight_decay)
 
 
 def build_loss_fn(

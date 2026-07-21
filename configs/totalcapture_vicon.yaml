@@ -18,11 +18,6 @@ slice:
   max_sequences: 0
 
 train:
-  model:
-    motionbert_root: /home/fzliang/MotionBERT
-    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
-    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
-    imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
   epochs: 200
   batch_size: 64
   num_workers: 8
@@ -34,48 +29,13 @@ train:
 
 test:
   batch_size: 64
-  grouped_test:
-    enabled: true
-    group_sizes: "2,4,6,8,16"
-    num_trials: 200
-    chunk_windows: 30
-    min_chunk_windows: 15
-    seed: 42
-
-# test:
-#   output:
-#     run_name: test_physics
-#   checkpoint: ""
-#   batch_size: 64
-#   matcher:
-#     dl_matcher:
-#       enabled: false
-#     physics_based_matcher:
-#       enabled: true
-#       evaluation_profile: multi_video
-#       frequency:
-#         enabled: true
-#         fs_hz: 30
-#         n_fft: 64
-#         top_k: 8
-#         band_min_hz: 0.3
-#         band_max_hz: 8.0
-#         use_hann: true
-#         use_log1p: true
-#         normalize: l2
-#         threshold: 0.0
-#         imu_signal: acc_norm_mean
-#         skeleton_signal: pelvis_right_wrist_speed
-#   grouped_test:
-#     enabled: true
-#     group_sizes: "2,4,5"
-#     num_trials: 200
-#     chunk_windows: 30
-#     min_chunk_windows: 15
-#     seed: 42
-#   synchronous_test:
-#     enabled: true
-#     group_size: 2
-#     num_trials: 200
-#     window_size: 24
-#     stride: 12
+  metrics:
+    frame_acc:
+      enabled: true
+    group_test:
+      enabled: true
+      group_sizes: "2,4,6,8,16"
+      num_trials: 200
+      chunk_windows: 30
+      min_chunk_windows: 15
+      seed: 42

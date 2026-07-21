@@ -18,17 +18,6 @@ slice:
 train:
   output:
     run_name: totalcapture_physic_imu
-  model:
-    imu_encoder_type: physics
-    physics_d_model: 128
-    physics_n_heads: 4
-    physics_num_layers: 3
-    physics_fs_hz: 30.0
-    physics_n_fft: 64
-    physics_dropout: 0.1
-    motionbert_root: /home/fzliang/origin/MotionBERT
-    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
-    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
   epochs: 100
   batch_size: 8
   num_workers: 4
@@ -46,13 +35,13 @@ test:
     run_name: totalcapture_physic_imu
   checkpoint: ""
   batch_size: 8
-  matcher:
-    dl_matcher:
+  metrics:
+    frame_acc:
       enabled: true
-  grouped_test:
-    enabled: true
-    group_sizes: "2,4,6,8,16"
-    num_trials: 50
-    chunk_windows: 30
-    min_chunk_windows: 15
-    seed: 42
+    group_test:
+      enabled: true
+      group_sizes: "2,4,6,8,16"
+      num_trials: 50
+      chunk_windows: 30
+      min_chunk_windows: 15
+      seed: 42

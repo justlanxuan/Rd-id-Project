@@ -1,14 +1,8 @@
-"""Pipelines module."""
+"""Legacy pipeline package.
 
-from src.pipelines.base import PipelineStage
+Use `python -m src.pipeline` or `src.pipeline.run_pipeline` for new code.
+"""
+
 from src.pipelines.full_pipeline import FullPipeline
-from src.pipelines.stages import SliceStage, ExtractStage, TrainStage, TestStage
 
-__all__ = [
-    "PipelineStage",
-    "FullPipeline",
-    "SliceStage",
-    "ExtractStage",
-    "TrainStage",
-    "TestStage",
-]
+__all__ = ["FullPipeline"]

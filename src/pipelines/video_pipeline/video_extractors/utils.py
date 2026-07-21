@@ -8,7 +8,7 @@ from typing import List
 
 import numpy as np
 
-from src.data.structures import Pose
+from src.preprocess.structures import Pose
 
 
 def convert_bytetrack_txt_to_detfile(

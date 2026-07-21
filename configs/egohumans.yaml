@@ -1,9 +1,10 @@
 project: egohumans
 
 preprocess:
-  dataset: totalcapture_synthetic
-  imu_source: synthetic
-  synthetic_imu_root: /home/fzliang/Autism-project/data/interim/egohumans_mobind/sequences_v2
+  dataset: egohumans
+  raw_root: /data/lyxie/ReID/Data/egohumans
+  imu_source: realistic
+  extracted_root: /data/lyxie/ReID_imu_generation/outputs/egohumans_imu_realistic/extracted_data
 
 slice:
   window_len: 24
@@ -20,10 +21,7 @@ train:
   output:
     run_name: egohumans
   model:
-    motionbert_root: /home/fzliang/origin/MotionBERT
-    motionbert_config: configs/pose3d/MB_ft_h36m_global_lite.yaml
-    motionbert_ckpt: checkpoint/pretrain/MB_lite_models.bin
-    imu_ckpt: /home/fzliang/despite/pretrained_models/v2/SIE_v2.pth
+    type: hybrid
   epochs: 50
   batch_size: 32
   num_workers: 4
@@ -38,14 +36,17 @@ test:
     run_name: egohumans
   checkpoint: ""
   batch_size: 64
-  grouped_test:
-    enabled: true
-    group_sizes: "2,4,6,8"
-    num_trials: 200
-    chunk_windows: 30
-    min_chunk_windows: 15
-    seed: 42
-  synchronous_test:
-    enabled: true
-    window_size: 24
-    stride: 16
+  metrics:
+    frame_acc:
+      enabled: true
+      seed: 42
+      shuffle_match: true
+    group_test:
+      enabled: true
+      group_sizes: "2,4,6,8"
+      num_trials: 200
+      chunk_windows: 30
+      min_chunk_windows: 15
+      seed: 42
+      shuffle_match: true
+      per_subject_split: false

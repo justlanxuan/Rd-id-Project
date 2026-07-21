@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 
-from src.data.structures import Pose, Track
+from src.preprocess.structures import Pose, Track
 
 
 class BasePoseEstimator(ABC):

@@ -26,8 +26,8 @@ class SymmetricInfoNCE(nn.Module):
     def __init__(self, temperature: float = 0.1, learn_temperature: bool = False) -> None:
         super().__init__()
         if learn_temperature:
-            self.temperature = nn.Parameter(
-                torch.tensor(float(temperature), dtype=torch.float32)
+            self.log_temperature = nn.Parameter(
+                torch.log(torch.tensor(float(temperature), dtype=torch.float32))
             )
         else:
             self.register_buffer(
@@ -61,7 +61,10 @@ class SymmetricInfoNCE(nn.Module):
         z_a = F.normalize(z_a, dim=-1)
         z_b = F.normalize(z_b, dim=-1)
 
-        t = torch.clamp(self.temperature, min=1e-6)
+        if hasattr(self, "log_temperature"):
+            t = torch.exp(self.log_temperature).clamp(0.02, 0.5)
+        else:
+            t = torch.clamp(self.temperature, min=1e-6)
         logits = torch.matmul(z_a, z_b.t()) / t
 
         if labels_a is None:
