@@ -1,16 +1,0 @@
-##################################################
-{'experiment': {'name': 'mae', 'seed': 1201, 'output_dir': './outputs/${experiment.name}', 'precision': 'amp', 'device': 'cuda'}, 'wandb': {'enabled': True, 'project': 'MoBind', 'config': {'experiment': '${experiment}', 'data': '${data}', 'model': '${model}', 'optimizer': '${optimizer}', 'training': '${training}', 'distributed': '${distributed}'}}, 'data': {'root_dir': '/data/lyxie/ReID/Data/egohumans/EgoHumans', 'window_sec': 5, 'stride_sec': 2, 'split': 'action', 'imu_srate': 20, 'motion_srate': 20, 'motion_type': 'wjoint', 'multi_sensor': True, 'num_limbs': 5, 'dataset_name': 'EgoHumans', 'drop_sensors': False, 'loader': {'batch_size': 128, 'num_workers': 8, 'pin_memory': True}}, 'model': {'stage1_exp': './checkpoints/EgoHumans/stage1', 'imu_encoder': 'conv_former', 'imu_channels': 7, 'motion_encoder': 'conv_former', 'motion_channels': 6, 'num_blocks': 4, 'num_heads': 8, 'patch_sec': 0.2, 'embedding_size': 256, 'global_embedding_size': 256, 'agg': None, 'lambda_mae': 0.3, 'mask_ratio': 0.75}, 'optimizer': {'opt': 'adam', 'lr': 0.0001, 'weight_decay': 0.0001}, 'training': {'epochs': 10000, 'log_interval': 25, 'val_interval': 1, 'local_weight': 0.0, 'multi_weight': 0.2, 'global_weight': 1.0, 'early_stopping': {'patience': 500, 'min_delta': 0.001, 'mode': 'max'}}, 'distributed': {'backend': 'nccl', 'gpus': [0]}}
-##################################################
-Loading stage 1 model from ./checkpoints/EgoHumans/stage1
-Testing on dataset: EgoHumans
-  0%|          | 0/8 [00:00<?, ?it/s] 12%|█▎        | 1/8 [00:00<00:04,  1.43it/s]100%|██████████| 8/8 [00:00<00:00,  9.87it/s]
-Metric           IMU → Video Motion → IMU
------------------------------------------
-R@1                   0.8264       0.8368
-R@3                   0.9069       0.9059
-R@5                   0.9289       0.9268
-R@10                  0.9550       0.9529
-R@25                  0.9728       0.9791
-R@50                  0.9864       0.9874
-mean_rank             4.5889       4.2134
-median_rank           1.0000       1.0000
