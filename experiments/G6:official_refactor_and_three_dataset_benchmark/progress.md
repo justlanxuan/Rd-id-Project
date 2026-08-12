@@ -112,3 +112,27 @@
 2. 创建并验证实验 snapshot commit，随后生成 commit-bound protocol hash 与全部 resolved configs。
 3. 人类指定可用 GPU 后运行单 seed/单 fold GPU smoke，记录峰值显存与时间。
 4. smoke 通过后扩展全部 required cells。
+
+### GPU smoke 与并发缓存修复
+
+- 人类授权使用所有空闲 GPU；实测选择物理 GPU 1、3 并行运行两个非正式
+  `preprocess -> train -> test` smoke，均退出码 0：
+  - TotalCapture source seed-0：10 个训练 step，`328/879`，FrameAcc `0.373151`；
+  - Custom direct fold-1 seed-0：10 个训练 step，`1784/3624`，加权 FrameAcc
+    `0.492274`。
+- smoke checkpoint 含 schema/model/capabilities/selection contract，完整逐分配与逐帧预测
+  保存在隔离的 `results.json`；这些指标只验证链路，不进入正式统计。
+- smoke 暴露 TotalCapture/EgoHumans 对 `reuse_prepared=true` 只解析不消费，仍会重写
+  共享缓存。现已统一三种 adapter 的只读复用分支：TotalCapture 按 subject，
+  EgoHumans/Custom 按 session 验证，并二次检查 `source_sequence` 泄漏。
+- 对三份真实缓存执行 preprocess 前后 mtime/size/SHA256 快照：TotalCapture 99 个文件、
+  EgoHumans 67 个文件、Custom fold-1 1849 个文件全部不变，证明可安全并行多 seed。
+- prepared validator 与 FrameAcc 对齐，优先使用显式 `candidate_group_id`；修复前它会将
+  TotalCapture 的 233 个候选组误判为 879 个 singleton。
+- evaluate stdout 改为仅打印标量摘要和完整预测路径，原始 assignments/clips 仍完整落盘，
+  避免 66 次正式评估产生不可监控的大日志。
+- 正式 `reid_project` 环境已建立并补齐锁定依赖：Python 3.10、PyTorch
+  `2.1.0+cu118`、torchvision `0.16.0+cu118`、NumPy `1.26.4`、SciPy `1.11.4`；
+  `pip check` 无冲突。
+- 修复后全量验证：`79 passed`，Ruff、compileall、`git diff --check` 与中文 skill
+  校验通过。下一步创建新 snapshot 并重新绑定 protocol/config 后重跑短 smoke。

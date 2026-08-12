@@ -489,6 +489,49 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def evaluation_console_summary(output: Dict[str, object]) -> Dict[str, object]:
+    """Return scalar diagnostics for stdout while full predictions stay on disk."""
+    summary: Dict[str, object] = {
+        "checkpoint": output.get("checkpoint"),
+        "test_csv": output.get("test_csv"),
+        "num_rows": output.get("num_rows"),
+        "evaluations": {},
+    }
+    evaluations = output.get("evaluations", {})
+    if not isinstance(evaluations, dict):
+        return summary
+    scalar_fields = {
+        "prediction_schema_version",
+        "mode",
+        "correct",
+        "total",
+        "correct_assignments",
+        "num_assignments",
+        "frame_acc",
+        "weighted_frame_acc",
+        "mean_window_acc",
+        "std_window_acc",
+        "num_candidate_windows",
+        "num_evaluated_windows",
+        "num_singleton_windows",
+        "singleton_rate",
+        "candidate_group_size_min",
+        "candidate_group_size_mean",
+    }
+    compact: Dict[str, object] = {}
+    for name, result in evaluations.items():
+        if not isinstance(result, dict):
+            compact[str(name)] = result
+            continue
+        compact[str(name)] = {
+            key: value
+            for key, value in result.items()
+            if key in scalar_fields and isinstance(value, (str, int, float, bool, type(None)))
+        }
+    summary["evaluations"] = compact
+    return summary
+
+
 def main() -> None:
     cli_args = parse_args()
     cfg = load_cfg(cli_args.config)
@@ -539,11 +582,12 @@ def main() -> None:
             per_subject_split=bool(group_cfg.PER_SUBJECT_SPLIT),
         ).evaluate(bundle)
 
-    print(json.dumps(output, indent=2))
     if save_json:
         out = Path(save_json)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(output, indent=2))
+        print(json.dumps(evaluation_console_summary(output), indent=2))
+        print(f"Full predictions: {out}")
         run_record = write_evaluation_run_record(
             cfg,
             checkpoint=checkpoint,
@@ -554,6 +598,8 @@ def main() -> None:
         )
         if run_record is not None:
             print(f"Run record: {run_record}")
+    else:
+        print(json.dumps(evaluation_console_summary(output), indent=2))
 
 
 if __name__ == "__main__":

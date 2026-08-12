@@ -12,6 +12,8 @@ def validate_prepared_dataset(
     root_dir: str | Path,
     *,
     expected_test_sessions: set[str] | None = None,
+    split_identity: str = "session",
+    expected_test_values: set[str] | None = None,
     allow_singleton_test_groups: bool = False,
 ) -> Path:
     root = Path(root_dir).expanduser().resolve()
@@ -26,15 +28,37 @@ def validate_prepared_dataset(
             raise ValueError(f"Prepared dataset split is empty: {csv_path}")
         split_rows[split] = rows
 
-    sessions = {split: {str(row.get("session", "")) for row in rows} for split, rows in split_rows.items()}
+    if expected_test_sessions is not None and expected_test_values is not None:
+        raise ValueError("Use expected_test_sessions or expected_test_values, not both")
+    expected = expected_test_values if expected_test_values is not None else expected_test_sessions
+    identities = {
+        split: {str(row.get(split_identity, "")) for row in rows if str(row.get(split_identity, ""))}
+        for split, rows in split_rows.items()
+    }
+    if any(not values for values in identities.values()):
+        raise ValueError(f"Prepared dataset has an empty {split_identity} split identity")
     for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
-        overlap = sessions[left] & sessions[right]
+        overlap = identities[left] & identities[right]
         if overlap:
-            raise ValueError(f"Prepared dataset session leakage between {left}/{right}: {sorted(overlap)}")
-    if expected_test_sessions is not None and sessions["test"] != expected_test_sessions:
+            raise ValueError(
+                f"Prepared dataset {split_identity} leakage between {left}/{right}: {sorted(overlap)}"
+            )
+    if expected is not None and identities["test"] != expected:
         raise ValueError(
-            f"Prepared test sessions {sorted(sessions['test'])} do not match expected {sorted(expected_test_sessions)}"
+            f"Prepared test {split_identity} values {sorted(identities['test'])} "
+            f"do not match expected {sorted(expected)}"
         )
+
+    source_sequences = {
+        split: {str(row.get("source_sequence", "")) for row in rows if str(row.get("source_sequence", ""))}
+        for split, rows in split_rows.items()
+    }
+    for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
+        overlap = source_sequences[left] & source_sequences[right]
+        if overlap:
+            raise ValueError(
+                f"Prepared dataset source_sequence leakage between {left}/{right}: {sorted(overlap)}"
+            )
 
     unique_npz = sorted({str(row["npz_path"]) for rows in split_rows.values() for row in rows})
     for relative_path in unique_npz:
@@ -56,11 +80,15 @@ def validate_prepared_dataset(
             if not np.isfinite(imu).all() or not np.isfinite(skeleton).all():
                 raise ValueError(f"Prepared window contains non-finite values: {npz_path}")
 
-    test_groups: dict[tuple[str, str, str], int] = {}
+    test_groups: dict[tuple[str, ...], int] = {}
     for row in split_rows["test"]:
-        source_sequence = str(row.get("source_sequence") or row.get("npz_path", ""))
-        source_start = str(row.get("source_window_start") or row.get("window_start", ""))
-        key = (source_sequence, source_start, str(row.get("window_end", "")))
+        explicit_group = str(row.get("candidate_group_id", "")).strip()
+        if explicit_group:
+            key = ("candidate_group_id", explicit_group)
+        else:
+            source_sequence = str(row.get("source_sequence") or row.get("npz_path", ""))
+            source_start = str(row.get("source_window_start") or row.get("window_start", ""))
+            key = ("derived", source_sequence, source_start, str(row.get("window_end", "")))
         test_groups[key] = test_groups.get(key, 0) + 1
     singleton_groups = [key for key, size in test_groups.items() if size < 2]
     if singleton_groups and not allow_singleton_test_groups:

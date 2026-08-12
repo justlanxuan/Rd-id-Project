@@ -62,7 +62,15 @@ def test_adapter_validation_rejects_non_monotonic_frame_ids(tmp_path):
         validate_preprocess_output("custom", tmp_path)
 
 
-def _write_prepared_split(root, split, session, *, candidates=2):
+def _write_prepared_split(
+    root,
+    split,
+    session,
+    *,
+    candidates=2,
+    subject="",
+    explicit_candidate_group=False,
+):
     rows = []
     for candidate_index in range(candidates):
         npz_name = f"{split}_{candidate_index}.npz"
@@ -75,11 +83,13 @@ def _write_prepared_split(root, split, session, *, candidates=2):
             {
                 "npz_path": npz_name,
                 "session": session,
+                "subject": subject,
                 "source_sequence": f"{split}_candidate_group",
                 "source_window_start": "0",
                 "window_start": "0",
                 "window_end": "4",
                 "candidate_index": str(candidate_index),
+                "candidate_group_id": f"{split}_explicit_group" if explicit_candidate_group else "",
             }
         )
     with (root / f"windows_{split}.csv").open("w", newline="") as handle:
@@ -119,3 +129,44 @@ def test_prepared_cache_validator_requires_explicit_singleton_policy(tmp_path):
         tmp_path,
         allow_singleton_test_groups=True,
     ) == tmp_path.resolve()
+
+
+def test_prepared_cache_validator_supports_subject_split_identity(tmp_path):
+    _write_prepared_split(tmp_path, "train", "shared_session", subject="S1")
+    _write_prepared_split(tmp_path, "val", "shared_session", subject="S2")
+    _write_prepared_split(tmp_path, "test", "shared_session", subject="S3")
+
+    assert validate_prepared_dataset(
+        tmp_path,
+        split_identity="subject",
+        expected_test_values={"S3"},
+    ) == tmp_path.resolve()
+
+
+def test_prepared_cache_validator_rejects_source_sequence_leakage(tmp_path):
+    _write_prepared_split(tmp_path, "train", "session_train")
+    _write_prepared_split(tmp_path, "val", "session_val")
+    _write_prepared_split(tmp_path, "test", "session_test")
+    val_csv = tmp_path / "windows_val.csv"
+    rows = list(csv.DictReader(val_csv.open(newline="")))
+    rows[0]["source_sequence"] = "train_candidate_group"
+    with val_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match="source_sequence leakage"):
+        validate_prepared_dataset(tmp_path)
+
+
+def test_prepared_cache_validator_prefers_explicit_candidate_group(tmp_path):
+    _write_prepared_split(tmp_path, "train", "session_train")
+    _write_prepared_split(tmp_path, "val", "session_val")
+    _write_prepared_split(
+        tmp_path,
+        "test",
+        "session_test",
+        explicit_candidate_group=True,
+    )
+
+    assert validate_prepared_dataset(tmp_path) == tmp_path.resolve()
