@@ -312,6 +312,11 @@ The runner requires an explicit physical GPU list, respects training
 dependencies, verifies completed artifacts before skipping them, and refuses
 to overwrite partial or corrupt checkpoints/run records.
 
+Controlled protocol variants use explicit benchmark profiles. For example,
+the G7 stride-24 ablation uses `--profile stride24` for manifest, protocol, and
+resolved-config generation. A profile owns its base configs and prepared roots,
+so it cannot silently reuse G6's window CSVs.
+
 ## Extending the repository
 
 ### Add a dataset

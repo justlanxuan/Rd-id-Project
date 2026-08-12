@@ -70,28 +70,36 @@ def _write_prepared_split(
     candidates=2,
     subject="",
     explicit_candidate_group=False,
+    starts=(0,),
 ):
     rows = []
-    for candidate_index in range(candidates):
-        npz_name = f"{split}_{candidate_index}.npz"
-        np.savez(
-            root / npz_name,
-            imu=np.ones((4, 7), dtype=np.float32),
-            skeleton=np.ones((4, 17, 3), dtype=np.float32),
-        )
-        rows.append(
-            {
-                "npz_path": npz_name,
-                "session": session,
-                "subject": subject,
-                "source_sequence": f"{split}_candidate_group",
-                "source_window_start": "0",
-                "window_start": "0",
-                "window_end": "4",
-                "candidate_index": str(candidate_index),
-                "candidate_group_id": f"{split}_explicit_group" if explicit_candidate_group else "",
-            }
-        )
+    for source_start in starts:
+        for candidate_index in range(candidates):
+            npz_name = f"{split}_{source_start}_{candidate_index}.npz"
+            np.savez(
+                root / npz_name,
+                imu=np.ones((4, 7), dtype=np.float32),
+                skeleton=np.ones((4, 17, 3), dtype=np.float32),
+            )
+            rows.append(
+                {
+                    "npz_path": npz_name,
+                    "session": session,
+                    "subject": subject,
+                    "source_sequence": f"{split}_candidate_group",
+                    "source_person": str(candidate_index),
+                    "source_window_start": str(source_start),
+                    "window_start": "0",
+                    "window_end": "4",
+                    "window_len": "4",
+                    "candidate_index": str(candidate_index),
+                    "candidate_group_id": (
+                        f"{split}_explicit_group_{source_start}"
+                        if explicit_candidate_group
+                        else ""
+                    ),
+                }
+            )
     with (root / f"windows_{split}.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
@@ -170,3 +178,22 @@ def test_prepared_cache_validator_prefers_explicit_candidate_group(tmp_path):
     )
 
     assert validate_prepared_dataset(tmp_path) == tmp_path.resolve()
+
+
+def test_prepared_cache_validator_checks_actual_window_len_and_stride(tmp_path):
+    for split, session in (
+        ("train", "session_train"),
+        ("val", "session_val"),
+        ("test", "session_test"),
+    ):
+        _write_prepared_split(tmp_path, split, session, starts=(0, 2, 4))
+
+    assert validate_prepared_dataset(
+        tmp_path,
+        expected_window_len=4,
+        expected_stride=2,
+    ) == tmp_path.resolve()
+    with pytest.raises(ValueError, match="stride mismatch"):
+        validate_prepared_dataset(tmp_path, expected_window_len=4, expected_stride=4)
+    with pytest.raises(ValueError, match="window_len mismatch"):
+        validate_prepared_dataset(tmp_path, expected_window_len=3, expected_stride=2)

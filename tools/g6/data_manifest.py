@@ -5,7 +5,9 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 from collections import Counter
+from functools import reduce
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,24 @@ def _candidate_group_key(row: dict[str, str]) -> str:
 
 def _counter_dict(counter: Counter[Any]) -> dict[str, int]:
     return {str(key): int(value) for key, value in sorted(counter.items(), key=lambda item: str(item[0]))}
+
+
+def _window_stride_stats(rows: list[dict[str, str]]) -> dict[str, Any]:
+    starts_by_stream: dict[str, set[int]] = {}
+    for row in rows:
+        key = str(row.get("source_sequence") or row.get("npz_path", ""))
+        starts_by_stream.setdefault(key, set()).add(
+            int(row.get("source_window_start") or row.get("window_start", ""))
+        )
+    deltas = Counter(
+        right - left
+        for starts in starts_by_stream.values()
+        for left, right in zip(sorted(starts), sorted(starts)[1:], strict=False)
+    )
+    return {
+        "inferred_stride": reduce(math.gcd, deltas) if deltas else None,
+        "delta_distribution": _counter_dict(deltas),
+    }
 
 
 def build_prepared_data_manifest(
@@ -79,6 +99,7 @@ def build_prepared_data_manifest(
                 }
             ),
             "window_lengths": _counter_dict(Counter(str(row.get("window_len", "")) for row in rows)),
+            "window_stride": _window_stride_stats(rows),
         }
 
     def overlap_by(field: str) -> dict[str, list[str]]:

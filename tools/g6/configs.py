@@ -12,18 +12,12 @@ import yaml
 
 from src.config import load_cfg
 
-from .build_data_manifests import CUSTOM_ROOT, SOURCE_ROOTS
 from .matrix import ExperimentCell, build_required_cells
+from .profiles import PROFILES, BenchmarkProfile, get_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BASE_CONFIGS = {
-    "totalcapture": REPO_ROOT / "configs/g6/totalcapture_source.yaml",
-    "egohumans": REPO_ROOT / "configs/g6/egohumans_source.yaml",
-}
-CUSTOM_BASE_CONFIGS = {
-    fold_id: REPO_ROOT / f"configs/g6/custom_direct_fold{fold_id}.yaml"
-    for fold_id in range(1, 5)
-}
+BASE_CONFIGS = PROFILES["g6"].base_configs
+CUSTOM_BASE_CONFIGS = PROFILES["g6"].custom_base_configs
 
 
 def _safe_name(job_id: str) -> str:
@@ -56,26 +50,28 @@ def _manifest_hashes(index_path: Path) -> dict[tuple[str, int | None], str]:
     return output
 
 
-def _prepared_root(cell: ExperimentCell) -> Path:
-    if cell.dataset in SOURCE_ROOTS:
-        return SOURCE_ROOTS[cell.dataset]
+def _prepared_root(cell: ExperimentCell, profile: BenchmarkProfile) -> Path:
+    if cell.dataset in profile.source_roots:
+        return profile.source_roots[cell.dataset]
     assert cell.fold_id is not None
-    return CUSTOM_ROOT / f"fold{cell.fold_id}_{cell.test_session}"
+    return profile.custom_root / f"fold{cell.fold_id}_{cell.test_session}"
 
 
-def _base_config(cell: ExperimentCell) -> dict[str, Any]:
-    if cell.dataset in BASE_CONFIGS:
-        return _load_yaml(BASE_CONFIGS[cell.dataset])
+def _base_config(cell: ExperimentCell, profile: BenchmarkProfile) -> dict[str, Any]:
+    if cell.dataset in profile.base_configs:
+        return _load_yaml(profile.base_configs[cell.dataset])
     assert cell.fold_id is not None
-    return _load_yaml(CUSTOM_BASE_CONFIGS[cell.fold_id])
+    return _load_yaml(profile.custom_base_configs[cell.fold_id])
 
 
 def _checkpoint_for_train_job(train_job_id: str, artifact_root: Path) -> Path:
     return artifact_root / "train" / _safe_name(train_job_id) / "best.pt"
 
 
-def _configure_data(config: dict[str, Any], cell: ExperimentCell) -> None:
-    root = _prepared_root(cell)
+def _configure_data(
+    config: dict[str, Any], cell: ExperimentCell, profile: BenchmarkProfile
+) -> None:
+    root = _prepared_root(cell, profile)
     preprocess = config.setdefault("preprocess", {})
     preprocess["dataset"] = cell.dataset
     preprocess["reuse_prepared"] = True
@@ -169,6 +165,7 @@ def generate_resolved_configs(
     protocol_hash: str,
     data_manifest_index: str | Path,
     artifact_root: str | Path,
+    profile_name: str = "g6",
 ) -> list[dict[str, Any]]:
     """Write and validate 42 train plus 66 evaluation configs."""
 
@@ -178,13 +175,14 @@ def generate_resolved_configs(
     destination = Path(output_dir).expanduser().resolve()
     destination.mkdir(parents=True, exist_ok=True)
     artifacts = Path(artifact_root).expanduser().resolve()
+    profile = get_profile(profile_name)
     manifest_hashes = _manifest_hashes(Path(data_manifest_index).expanduser().resolve())
     entries: list[dict[str, Any]] = []
 
     for cell in build_required_cells():
-        config = copy.deepcopy(_base_config(cell))
+        config = copy.deepcopy(_base_config(cell, profile))
         config["project"] = _safe_name(cell.job_id)
-        _configure_data(config, cell)
+        _configure_data(config, cell, profile)
         manifest_key = (cell.dataset, cell.fold_id if cell.dataset == "custom" else None)
         if cell.job_type == "train":
             _configure_train(

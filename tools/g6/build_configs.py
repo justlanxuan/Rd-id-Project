@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from .configs import generate_resolved_configs
+from .profiles import PROFILES
 
 
 def parse_args() -> argparse.Namespace:
@@ -15,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--protocol-hash", required=True)
     parser.add_argument("--data-manifest-index", required=True)
     parser.add_argument("--artifact-root", required=True)
+    parser.add_argument("--profile", choices=sorted(PROFILES), default="g6")
     return parser.parse_args()
 
 
@@ -26,10 +28,12 @@ def main() -> None:
         protocol_hash=args.protocol_hash,
         data_manifest_index=args.data_manifest_index,
         artifact_root=args.artifact_root,
+        profile_name=args.profile,
     )
     payload = {
         "schema_version": "1.0",
         "protocol_hash": args.protocol_hash,
+        "profile": args.profile,
         "summary": {
             "training": sum(row["job_type"] == "train" for row in entries),
             "evaluation": sum(row["job_type"] == "evaluate" for row in entries),

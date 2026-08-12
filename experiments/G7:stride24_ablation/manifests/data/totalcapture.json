@@ -1,0 +1,293 @@
+{
+  "candidate_groups_test": {
+    "count": 155,
+    "singleton_groups": 0,
+    "singleton_rate": 0.0,
+    "size_distribution": {
+      "2": 7,
+      "3": 20,
+      "4": 128
+    }
+  },
+  "content_summary": {
+    "all_finite": true,
+    "evaluation_artifact_files": 0,
+    "imu_shapes": {
+      "2020x1x7": 1,
+      "2040x1x7": 1,
+      "2092x1x7": 1,
+      "2313x1x7": 1,
+      "2464x1x7": 1,
+      "2591x1x7": 1,
+      "2770x1x7": 1,
+      "2826x1x7": 1,
+      "3006x1x7": 1,
+      "3073x1x7": 1,
+      "3178x1x7": 1,
+      "3189x1x7": 1,
+      "3239x1x7": 1,
+      "3376x1x7": 1,
+      "3387x1x7": 1,
+      "3388x1x7": 1,
+      "3397x1x7": 1,
+      "3501x1x7": 1,
+      "3518x1x7": 1,
+      "3538x1x7": 1,
+      "3553x1x7": 1,
+      "3561x1x7": 1,
+      "3575x1x7": 1,
+      "3577x1x7": 1,
+      "3624x1x7": 1,
+      "3671x1x7": 1,
+      "3695x1x7": 1,
+      "3704x1x7": 1,
+      "3712x1x7": 1,
+      "3738x1x7": 1,
+      "3808x1x7": 1,
+      "3931x1x7": 1,
+      "4115x1x7": 1,
+      "4293x1x7": 1,
+      "4828x1x7": 1,
+      "4858x1x7": 1,
+      "4892x1x7": 1,
+      "5319x1x7": 1,
+      "5430x1x7": 1,
+      "5700x1x7": 1,
+      "5758x1x7": 1,
+      "5939x1x7": 1,
+      "5944x1x7": 1,
+      "5993x1x7": 1,
+      "6419x1x7": 1,
+      "6777x1x7": 1
+    },
+    "npz_files": 46,
+    "skeleton_shapes": {
+      "2020x1x17x3": 1,
+      "2040x1x17x3": 1,
+      "2092x1x17x3": 1,
+      "2313x1x17x3": 1,
+      "2464x1x17x3": 1,
+      "2591x1x17x3": 1,
+      "2770x1x17x3": 1,
+      "2826x1x17x3": 1,
+      "3006x1x17x3": 1,
+      "3073x1x17x3": 1,
+      "3178x1x17x3": 1,
+      "3189x1x17x3": 1,
+      "3239x1x17x3": 1,
+      "3376x1x17x3": 1,
+      "3387x1x17x3": 1,
+      "3388x1x17x3": 1,
+      "3397x1x17x3": 1,
+      "3501x1x17x3": 1,
+      "3518x1x17x3": 1,
+      "3538x1x17x3": 1,
+      "3553x1x17x3": 1,
+      "3561x1x17x3": 1,
+      "3575x1x17x3": 1,
+      "3577x1x17x3": 1,
+      "3624x1x17x3": 1,
+      "3671x1x17x3": 1,
+      "3695x1x17x3": 1,
+      "3704x1x17x3": 1,
+      "3712x1x17x3": 1,
+      "3738x1x17x3": 1,
+      "3808x1x17x3": 1,
+      "3931x1x17x3": 1,
+      "4115x1x17x3": 1,
+      "4293x1x17x3": 1,
+      "4828x1x17x3": 1,
+      "4858x1x17x3": 1,
+      "4892x1x17x3": 1,
+      "5319x1x17x3": 1,
+      "5430x1x17x3": 1,
+      "5700x1x17x3": 1,
+      "5758x1x17x3": 1,
+      "5939x1x17x3": 1,
+      "5944x1x17x3": 1,
+      "5993x1x17x3": 1,
+      "6419x1x17x3": 1,
+      "6777x1x17x3": 1
+    },
+    "zero_imu_files": 0,
+    "zero_skeleton_files": 0
+  },
+  "csv_sha256": {
+    "windows_test.csv": "574262ac6007e89176141bba216f360d6fe9db09d1479b7c0896157ab1af3175",
+    "windows_train.csv": "479f20f7ef3c69c0c64583f9b81b4300ee02e2085c84e2dcc54e576b97a8e6f5",
+    "windows_val.csv": "ac065532be832f0e4b093c5caf46760dfaac5e4e98acf7f48d86c007594d5cb2"
+  },
+  "dataset": "totalcapture",
+  "evaluation_artifact_sha256": {},
+  "fold_id": null,
+  "manifest_hash": "63197e7b2bad62bccc0891400133297699a0da2e30bccf502ac287abe18844d1",
+  "npz_sha256": {
+    "sequences/totalcapture_S1_acting1_cam1.npz": "b42f6c4a6a86199b1fd21627299680ca1262056a73fd1d7bacaa4705ed898fb3",
+    "sequences/totalcapture_S1_acting2_cam1.npz": "f5a248a60bc97cec1f2a2e688172d32a97b0405c5fda138e8f9579ff02757897",
+    "sequences/totalcapture_S1_acting3_cam1.npz": "2a6b5e4d876a036493847de1349424728d1737e5d6b103601a7c81d2d74facb7",
+    "sequences/totalcapture_S1_freestyle1_cam1.npz": "8e335d29b0ffcdcbe9f34079abf3eee50dd57769ec97c8a8aafe3c03aa5f4bd2",
+    "sequences/totalcapture_S1_freestyle2_cam1.npz": "d92936238d5e91f4f87d1385b59789f3c8fa990665496a3b2e7d786cdea29475",
+    "sequences/totalcapture_S1_freestyle3_cam1.npz": "d84bdcc107478fa8205b839caf6ccd0901c04990b6f5e3786d79ce1dd59d8e4b",
+    "sequences/totalcapture_S1_rom1_cam1.npz": "0fdb464098e0c7848e1e851a5e56bd2a3dabe95e44413bd8489f5ba6c3255e8d",
+    "sequences/totalcapture_S1_rom2_cam1.npz": "0f611bdc8946b612955d9a4e05d34fe94ef4da0445649471727ae42488833494",
+    "sequences/totalcapture_S1_rom3_cam1.npz": "9f87bba2807ffb34a9df757cb81b286d25bd962eaa20930b94ed7dd1380e311e",
+    "sequences/totalcapture_S1_walking1_cam1.npz": "ac048ddef4cd8784a17f03ddc752836dd59ffad38884d064a7ba08bca60ccb6a",
+    "sequences/totalcapture_S1_walking2_cam1.npz": "7991b4ac3c2310e16dd6732154479aa7dbf80d9d31293814bcca97292dc38b1d",
+    "sequences/totalcapture_S1_walking3_cam1.npz": "5e9e2baa9d69e2195864d502e5fde27e069788b9e4ad4a22c07dfd1b815b3cee",
+    "sequences/totalcapture_S2_acting1_cam1.npz": "f925027c0060644d3088e2e318bfcf8df2cdfb057bff0b4bbab2e065b436c5cb",
+    "sequences/totalcapture_S2_acting2_cam1.npz": "6aba1f080f281fa8bc2ba9ba57bb4ee8b26f7865d6b28faeb26fce9bb7f7ea51",
+    "sequences/totalcapture_S2_acting3_cam1.npz": "2e75bef3b0b975f8ae0cb9670097c4080c545329e0f72f11283e32fd5c5dabb6",
+    "sequences/totalcapture_S2_freestyle1_cam1.npz": "b7f17460c109e33cb961f5631a06747a5c5425886ea674e13bf59585e31626ad",
+    "sequences/totalcapture_S2_freestyle2_cam1.npz": "db12fbfe40bd9593de330dd306b97c759583741e8f55640e6bf896aa365c4307",
+    "sequences/totalcapture_S2_freestyle3_cam1.npz": "2584933aaca582d2a38fd3d8dc827c52d3c8817243b986468a16a25def5963a1",
+    "sequences/totalcapture_S2_rom1_cam1.npz": "39e30525389f80d000bc32a85e49c1a2a0877133864b418d27d3d8149fd562d4",
+    "sequences/totalcapture_S2_rom2_cam1.npz": "120296edadb7231d10ca2d010ae02333893ee027694c99ddcd1e73ef55ed482c",
+    "sequences/totalcapture_S2_rom3_cam1.npz": "c00ad313c98ca3ee6287d5a008cd3246c8d0dafff9c4d1be2bb0fed421b89e14",
+    "sequences/totalcapture_S2_walking1_cam1.npz": "895c1ac387708a5693e634691b79b69db1be4bb38baef721efa1df33c5b0c2e9",
+    "sequences/totalcapture_S2_walking2_cam1.npz": "9c4d87d4d78015845a8a854e7a8674d3ecc021b3f5ea772693a513e95d4d494d",
+    "sequences/totalcapture_S2_walking3_cam1.npz": "c61d2b6b920e90feafc1ebd5f55890b9d1b32847d85bfba94383e6a0417c6791",
+    "sequences/totalcapture_S3_acting1_cam1.npz": "9427564da89d6af296607ff08d67542c64073284403b9ba0c9719ce460235558",
+    "sequences/totalcapture_S3_acting2_cam1.npz": "b99a304fab20a9bcb00498872e85d91d31e19044f9012fa7129d13ae41e5da4e",
+    "sequences/totalcapture_S3_acting3_cam1.npz": "edf6e8d696969831d50711121a2c1fc96094e048a5ed2df99a222604af8eac8b",
+    "sequences/totalcapture_S3_freestyle1_cam1.npz": "6fd993638b733144b93b36f803253cea228f418261de96f2bd16478afe83a168",
+    "sequences/totalcapture_S3_freestyle2_cam1.npz": "6e3ea109c44eed9800a95419893831e40d38d7bce828522677ee965bbeee8580",
+    "sequences/totalcapture_S3_freestyle3_cam1.npz": "c56d4f3d3edcf9430c759fb676cecceee3632f2438fabfabbbb97d34eddf2f4c",
+    "sequences/totalcapture_S3_rom1_cam1.npz": "be3cc2f74447b5d0f2f76e49e9ba2992220341384a8222a9f1ad9c80249114c7",
+    "sequences/totalcapture_S3_rom2_cam1.npz": "7262cf0d2402c3ce2fe103ae7f5ef8c31b05589b210cbd491a35092657967a70",
+    "sequences/totalcapture_S3_rom3_cam1.npz": "4138bbc7c3aaf9ffae94947f1afc806a85088f7638fc4e38c5003568eaf30ff8",
+    "sequences/totalcapture_S3_walking1_cam1.npz": "84e1e3cfbc267c9ffd7e782eacc2214f268d2d0fdb7fd052885be40919f1bf91",
+    "sequences/totalcapture_S3_walking2_cam1.npz": "5f155ac3e5b5a96f371bc83a1335f67961582e38679bdfdc03a358e041b883b4",
+    "sequences/totalcapture_S3_walking3_cam1.npz": "250f280ffde588c2250f56301185c7e93344f2c794087bbee405c707fd28a819",
+    "sequences/totalcapture_S4_acting3_cam1.npz": "1ac11be410e45c3d1941c7acb7f309d003eeee8e2d84d37b1d23b39a5aee10e1",
+    "sequences/totalcapture_S4_freestyle1_cam1.npz": "6d183529db39c788ea6f93408b4fb10f4ae87e6bb39c46a2cad7d2bfd0477f56",
+    "sequences/totalcapture_S4_freestyle3_cam1.npz": "bacadbd19ec12e90ec0eb1ab9a1fcc30ee99f63b697cbbcb5bdf53213d50bee5",
+    "sequences/totalcapture_S4_rom3_cam1.npz": "8b231ba222462d481eb75902726ff0ef4a023b78f17feb119a587ff8781fa4fe",
+    "sequences/totalcapture_S4_walking2_cam1.npz": "8c375a2d0846c805dd2f041bfa7bb9ab44ee3b315086217c77c1a1c0d602392a",
+    "sequences/totalcapture_S5_acting3_cam1.npz": "bb46f1a644407ce612dfeb8c42a2ab30114542b55775a7b1cc0c6b07545e0ac0",
+    "sequences/totalcapture_S5_freestyle1_cam1.npz": "c41dff9357a4f02d6e5707ab3c405f8b5dae4812654080395f8bf3df0f69090c",
+    "sequences/totalcapture_S5_freestyle3_cam1.npz": "bfb41ee710f7cf339af47285ed8aec893d7ad9102e9ca834d737dbedfb782778",
+    "sequences/totalcapture_S5_rom3_cam1.npz": "5a8c5c057c07d7e27acad4d679954629b84f38dc77ccc1e731dfe0e8248c5c41",
+    "sequences/totalcapture_S5_walking2_cam1.npz": "e2b929c7051b3c33f00a9a142d0860cea7a029fbf3af447aa353de164b0c94e6"
+  },
+  "prepared_root": "/data/fzliang/reid-project/totalcapture/preprocessed/stride24_w24",
+  "schema_version": "1.0",
+  "split_identity": "subject",
+  "split_overlaps": {
+    "session": {
+      "train_test": [
+        "acting3",
+        "freestyle1",
+        "freestyle3",
+        "rom3",
+        "walking2"
+      ],
+      "train_val": [
+        "acting3",
+        "freestyle1",
+        "freestyle3",
+        "rom3",
+        "walking2"
+      ],
+      "val_test": [
+        "acting3",
+        "freestyle1",
+        "freestyle3",
+        "rom3",
+        "walking2"
+      ]
+    },
+    "source_sequence": {
+      "train_test": [],
+      "train_val": [],
+      "val_test": []
+    },
+    "subject": {
+      "train_test": [],
+      "train_val": [],
+      "val_test": []
+    }
+  },
+  "split_stats": {
+    "test": {
+      "rows": 586,
+      "sessions": [
+        "acting3",
+        "freestyle1",
+        "freestyle3",
+        "rom3",
+        "walking2"
+      ],
+      "source_persons": 5,
+      "source_sequences": 5,
+      "subjects": [
+        "S5"
+      ],
+      "window_lengths": {
+        "24": 586
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 581
+        },
+        "inferred_stride": 24
+      }
+    },
+    "train": {
+      "rows": 5937,
+      "sessions": [
+        "acting1",
+        "acting2",
+        "acting3",
+        "freestyle1",
+        "freestyle2",
+        "freestyle3",
+        "rom1",
+        "rom2",
+        "rom3",
+        "walking1",
+        "walking2",
+        "walking3"
+      ],
+      "source_persons": 36,
+      "source_sequences": 36,
+      "subjects": [
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "window_lengths": {
+        "24": 5937
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 5901
+        },
+        "inferred_stride": 24
+      }
+    },
+    "val": {
+      "rows": 716,
+      "sessions": [
+        "acting3",
+        "freestyle1",
+        "freestyle3",
+        "rom3",
+        "walking2"
+      ],
+      "source_persons": 5,
+      "source_sequences": 5,
+      "subjects": [
+        "S4"
+      ],
+      "window_lengths": {
+        "24": 716
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 711
+        },
+        "inferred_stride": 24
+      }
+    }
+  }
+}

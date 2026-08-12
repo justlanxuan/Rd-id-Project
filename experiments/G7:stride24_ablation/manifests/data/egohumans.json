@@ -1,0 +1,238 @@
+{
+  "candidate_groups_test": {
+    "count": 231,
+    "singleton_groups": 0,
+    "singleton_rate": 0.0,
+    "size_distribution": {
+      "3": 180,
+      "4": 51
+    }
+  },
+  "content_summary": {
+    "all_finite": true,
+    "evaluation_artifact_files": 0,
+    "imu_shapes": {
+      "121x4x7": 1,
+      "168x4x7": 1,
+      "189x4x7": 1,
+      "200x4x7": 1,
+      "201x3x7": 1,
+      "220x4x7": 1,
+      "241x3x7": 1,
+      "311x3x7": 1,
+      "311x4x7": 1,
+      "371x3x7": 1,
+      "371x4x7": 1,
+      "421x3x7": 1,
+      "431x3x7": 1,
+      "441x4x7": 1,
+      "451x3x7": 1,
+      "551x3x7": 1,
+      "571x3x7": 1,
+      "601x3x7": 10,
+      "601x4x7": 1,
+      "716x4x7": 1,
+      "761x3x7": 1
+    },
+    "npz_files": 30,
+    "skeleton_shapes": {
+      "121x4x17x3": 1,
+      "168x4x17x3": 1,
+      "189x4x17x3": 1,
+      "200x4x17x3": 1,
+      "201x3x17x3": 1,
+      "220x4x17x3": 1,
+      "241x3x17x3": 1,
+      "311x3x17x3": 1,
+      "311x4x17x3": 1,
+      "371x3x17x3": 1,
+      "371x4x17x3": 1,
+      "421x3x17x3": 1,
+      "431x3x17x3": 1,
+      "441x4x17x3": 1,
+      "451x3x17x3": 1,
+      "551x3x17x3": 1,
+      "571x3x17x3": 1,
+      "601x3x17x3": 10,
+      "601x4x17x3": 1,
+      "716x4x17x3": 1,
+      "761x3x17x3": 1
+    },
+    "zero_imu_files": 0,
+    "zero_skeleton_files": 0
+  },
+  "csv_sha256": {
+    "windows_test.csv": "7abed67fca16ac816130d196bc3ce126fbd99c14ab710c94a941f5403c8bf337",
+    "windows_train.csv": "8ad005b88c73a8bd9c2c713568f5e48c28af55a2dcc762394e318fc147b7af50",
+    "windows_val.csv": "b3262f137cf6ae522b3feb94604cbc3eac439a85eec0d4cdf53fd506310fc6b1"
+  },
+  "dataset": "egohumans",
+  "evaluation_artifact_sha256": {},
+  "fold_id": null,
+  "manifest_hash": "00fe440f82b5e09a145558df969d5466a569482e90c79b92738d4f84e0646284",
+  "npz_sha256": {
+    "sequences/egohumans_01_001.npz": "9ba9d782a0165439d6fc2cbc693dbf06102b74b8e5c8cb6f337e3ed606d09b79",
+    "sequences/egohumans_01_002.npz": "186f6960585977a5a12758a046f153ec18137bf0e16198d352daa3592bce12c9",
+    "sequences/egohumans_01_003.npz": "4ba90ba943866295ac5000364150ceba70c9dc5031fb98ea58a7c941d4f66d62",
+    "sequences/egohumans_01_004.npz": "61dec3a4408e68455b06dc58ef00847da3c2885dc128a548423eba66d6e191b2",
+    "sequences/egohumans_01_005.npz": "0139321e904c71a68917e8ba181fcc8ef3002583c38cd76ae6d381b661bbd5fe",
+    "sequences/egohumans_01_006.npz": "fbf8ce2c9f1df41ce48a4febbd69ae3ed11a92017d8d00c5fabdec964166aa46",
+    "sequences/egohumans_01_007.npz": "2f181eb47ba6a3a447da0306f42a17977f5ed83b497e3fe0e2d88487b5cae293",
+    "sequences/egohumans_01_008.npz": "e083db1818daf0915a3e68646fac263f32cbafbd86c5c4ae939046ed250d080c",
+    "sequences/egohumans_01_009.npz": "af0843f121f95bbf096490aaf65850eb2776d31e9876eb44ea2517b0b30a04b4",
+    "sequences/egohumans_01_010.npz": "7977dd0ad0bf7233ea13bad079c2322986e4d5173f40b32c3d70fd943dd2d238",
+    "sequences/egohumans_01_011.npz": "07dec214887b439b5b288e7698e74abed4ea123fda29c7c8f737aec72a91f7d5",
+    "sequences/egohumans_01_012.npz": "6e54548776c467991f9e77bd8ba79e2a1ae0f3e560c2fd30cd903fa5c8223342",
+    "sequences/egohumans_01_013.npz": "096b2f8dc486848cb75fc911372c059a6c6d8af1ffac406849b7a28138152a9d",
+    "sequences/egohumans_01_014.npz": "bbcfe0d8b862bdc2aa3d01aa92c4de440fa96fcfd7a50bc0fc9a020e9a8d6a7c",
+    "sequences/egohumans_02_001.npz": "792ef10f5f464806391afd918e874e5b381ab271b2da92d92b892d7ecb5cc543",
+    "sequences/egohumans_02_002.npz": "16c1701f42a714109459f33fa9998a73fc97e6cfc8cca1826dd1c5ca1b2c8515",
+    "sequences/egohumans_02_003.npz": "12438fc3d1132862fa69db343a78912b569023f9c289ae62a4f50f44017d1799",
+    "sequences/egohumans_02_004.npz": "ca9aa7dc3ed6e09741a400f38ac7db28ef5b0a71a5ef664dce4142a27304b46b",
+    "sequences/egohumans_02_005.npz": "b504c71167da49df55f58d3b747493b2996bf36580c7c122840e0df01f7767d8",
+    "sequences/egohumans_02_006.npz": "3c75d69fed6ef87479a1498c1f1bc5f289096c6474eea9ecf13b799660b04f28",
+    "sequences/egohumans_03_001.npz": "804fb5b1343b9858ce73cb960d481dd6c85fa5f62e239df53f7844c9c3f870f7",
+    "sequences/egohumans_03_002.npz": "25514146e489f9bee6c5a4ac1f5be0dd0a749e9664ff0bba1f600354033dc266",
+    "sequences/egohumans_03_003.npz": "53fc5c405518cddc0f33f03b28b293fae73061d8110058773b1a8583517e25e8",
+    "sequences/egohumans_03_004.npz": "13b56591193141df340b935f9a261ac239ca93e2789393bbd855ac89abb5640e",
+    "sequences/egohumans_03_005.npz": "3b7ac3736064a6e55ed2504e83cbe34a605ddafcc7e8b1880f17034ae68d8636",
+    "sequences/egohumans_03_006.npz": "b6b9042753a70a21f0ae4f26a4dad257b50d2dd0c5cf6f558745c4076570c24f",
+    "sequences/egohumans_03_007.npz": "edf6c0a782fa43e4db691ca8646eb01466f0333792b906c1b1e7caf3f0cef72c",
+    "sequences/egohumans_03_008.npz": "da585b466fc159503c9e17a8c89e4c4402f30d95586e2c0d6fc0bc1e0e9d74a5",
+    "sequences/egohumans_03_009.npz": "fc2123877592710513e65e961293c4db1e72955749ae936e40beccdf91066ccf",
+    "sequences/egohumans_03_010.npz": "5d022fdc2b04ca842d19cde2e376d928cf8b317cf002fc2d9517644b61895b04"
+  },
+  "prepared_root": "/data/fzliang/reid-project/egohumans/preprocessed/stride24_w24",
+  "schema_version": "1.0",
+  "split_identity": "session",
+  "split_overlaps": {
+    "session": {
+      "train_test": [],
+      "train_val": [],
+      "val_test": []
+    },
+    "source_sequence": {
+      "train_test": [],
+      "train_val": [],
+      "val_test": []
+    },
+    "subject": {
+      "train_test": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "train_val": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "val_test": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ]
+    }
+  },
+  "split_stats": {
+    "test": {
+      "rows": 744,
+      "sessions": [
+        "01_001",
+        "01_002",
+        "01_003",
+        "01_004",
+        "02_001",
+        "02_002",
+        "02_003",
+        "02_004",
+        "03_001",
+        "03_002",
+        "03_003",
+        "03_004"
+      ],
+      "source_persons": 40,
+      "source_sequences": 12,
+      "subjects": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "window_lengths": {
+        "24": 744
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 219
+        },
+        "inferred_stride": 24
+      }
+    },
+    "train": {
+      "rows": 873,
+      "sessions": [
+        "01_006",
+        "01_007",
+        "01_008",
+        "01_009",
+        "01_010",
+        "01_011",
+        "01_012",
+        "01_013",
+        "01_014",
+        "02_006",
+        "03_006",
+        "03_007",
+        "03_008",
+        "03_009",
+        "03_010"
+      ],
+      "source_persons": 50,
+      "source_sequences": 15,
+      "subjects": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "window_lengths": {
+        "24": 873
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 254
+        },
+        "inferred_stride": 24
+      }
+    },
+    "val": {
+      "rows": 192,
+      "sessions": [
+        "01_005",
+        "02_005",
+        "03_005"
+      ],
+      "source_persons": 10,
+      "source_sequences": 3,
+      "subjects": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "window_lengths": {
+        "24": 192
+      },
+      "window_stride": {
+        "delta_distribution": {
+          "24": 55
+        },
+        "inferred_stride": 24
+      }
+    }
+  }
+}

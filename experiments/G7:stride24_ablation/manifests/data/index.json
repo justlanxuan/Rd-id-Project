@@ -1,0 +1,42 @@
+{
+  "manifests": [
+    {
+      "dataset": "totalcapture",
+      "file": "totalcapture.json",
+      "fold_id": null,
+      "manifest_hash": "63197e7b2bad62bccc0891400133297699a0da2e30bccf502ac287abe18844d1"
+    },
+    {
+      "dataset": "egohumans",
+      "file": "egohumans.json",
+      "fold_id": null,
+      "manifest_hash": "00fe440f82b5e09a145558df969d5466a569482e90c79b92738d4f84e0646284"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold1_20260211_171423.json",
+      "fold_id": 1,
+      "manifest_hash": "00d608ab6847f115651e1a57abb79a8aef42a30b2d74c75faeab06b82e4ed3d1"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold2_20260211_171724.json",
+      "fold_id": 2,
+      "manifest_hash": "33e2cc9c1f87e5107bae457be90ffde4582703b9934dd15178bd8ff2ca58e7d2"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold3_20260211_172257.json",
+      "fold_id": 3,
+      "manifest_hash": "43528f0c00f0f6bd44c8576c5f90a0f7185083227506aed3916f0a8ceb2f0ea3"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold4_20260211_172522.json",
+      "fold_id": 4,
+      "manifest_hash": "3f8f668c8f66585391faed1c9319f023ea52195ec50ead3d3f3e1e9aa757852e"
+    }
+  ],
+  "profile": "stride24",
+  "schema_version": "1.0"
+}

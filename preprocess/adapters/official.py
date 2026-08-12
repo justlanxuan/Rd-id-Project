@@ -71,6 +71,8 @@ class CustomAdapter(DatasetAdapter):
                 prepared_root,
                 expected_test_sessions=test_sessions or None,
                 split_identity="session",
+                expected_window_len=_optional_int(slice_config.get("window_len")),
+                expected_stride=_optional_int(slice_config.get("stride")),
                 allow_singleton_test_groups=allow_singletons,
             )
             return PreprocessArtifact(self.dataset_name, prepared, None, prepared=True)
@@ -111,6 +113,8 @@ def _reuse_prepared(
         prepared_root,
         split_identity=split_identity,
         expected_test_values=expected_test_values or None,
+        expected_window_len=_optional_int(slice_config.get("window_len")),
+        expected_stride=_optional_int(slice_config.get("stride")),
         allow_singleton_test_groups=allow_singletons,
     )
     return PreprocessArtifact(adapter.dataset_name, prepared, None, prepared=True)
@@ -122,3 +126,9 @@ def _as_set(value) -> set[str]:
     if isinstance(value, str):
         return {part.strip() for part in value.split(",") if part.strip()}
     return {str(item).strip() for item in value if str(item).strip()}
+
+
+def _optional_int(value) -> int | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return int(value)

@@ -1,0 +1,38 @@
+project: stride24_egohumans_source
+
+preprocess:
+  dataset: egohumans
+  reuse_prepared: true
+  prepared_root: /data/fzliang/reid-project/egohumans/preprocessed/stride24_w24
+
+slice:
+  window_len: 24
+  stride: 24
+  train_sessions: "01_006,01_007,01_008,01_009,01_010,01_011,01_012,01_013,01_014,02_006,03_006,03_007,03_008,03_009,03_010"
+  val_sessions: "01_005,02_005,03_005"
+  test_sessions: "01_001,01_002,01_003,01_004,02_001,02_002,02_003,02_004,03_001,03_002,03_003,03_004"
+  skeleton_source: vicon
+  multi_person: true
+  require_multi_candidate_test: true
+
+train:
+  model: {type: hybrid}
+  epochs: 50
+  batch_size: 32
+  num_workers: 4
+  compute_imu_stats: true
+  imu_sensor: ""
+  repeat_single_sensor: 1
+  device: cuda
+  seed: 0
+  output: {run_name: stride24_egohumans_source_seed0}
+
+test:
+  batch_size: 64
+  metrics:
+    frame_acc:
+      enabled: true
+      singleton_policy: error
+      seed: 42
+      shuffle_match: true
+    group_test: {enabled: false}

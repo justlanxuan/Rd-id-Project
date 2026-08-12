@@ -7,10 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .configs import BASE_CONFIGS, CUSTOM_BASE_CONFIGS
 from .data_manifest import sha256_file
 from .git_snapshot import require_clean_git_snapshot
 from .matrix import build_required_cells
+from .profiles import get_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENT_FILE = REPO_ROOT / "environment.yml"
@@ -26,6 +26,7 @@ def build_protocol_record(
     data_manifest_index: str | Path,
     *,
     repo_root: str | Path = REPO_ROOT,
+    profile_name: str = "g6",
 ) -> dict[str, Any]:
     document = Path(protocol_document).expanduser().resolve()
     text = document.read_text(encoding="utf-8")
@@ -41,7 +42,11 @@ def build_protocol_record(
     if len(data_hashes) != 6 or any(not value for value in data_hashes.values()):
         raise ValueError("Protocol requires exactly six non-empty G6 data manifest hashes.")
 
-    config_paths = {**BASE_CONFIGS, **{f"custom_fold{key}": value for key, value in CUSTOM_BASE_CONFIGS.items()}}
+    profile = get_profile(profile_name)
+    config_paths = {
+        **profile.base_configs,
+        **{f"custom_fold{key}": value for key, value in profile.custom_base_configs.items()},
+    }
     base_config_hashes = {
         str(name): sha256_file(path.resolve())
         for name, path in sorted(config_paths.items(), key=lambda item: str(item[0]))
@@ -49,6 +54,7 @@ def build_protocol_record(
     cells = [cell.to_dict() for cell in build_required_cells()]
     git_commit = require_clean_git_snapshot(repo_root)
     components = {
+        "profile": profile.name,
         "git_commit": git_commit,
         "environment_sha256": sha256_file(ENVIRONMENT_FILE),
         "protocol_document_sha256": sha256_file(document),
@@ -59,6 +65,7 @@ def build_protocol_record(
     return {
         "schema_version": "1.0",
         "status": "locked",
+        "profile": profile.name,
         "git_commit": git_commit,
         "protocol_hash": _sha256_json(components),
         "components": components,

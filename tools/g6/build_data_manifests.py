@@ -8,14 +8,10 @@ from pathlib import Path
 
 from .data_manifest import build_prepared_data_manifest
 from .matrix import CUSTOM_FOLDS
+from .profiles import PROFILES, get_profile
 
-SOURCE_ROOTS = {
-    "totalcapture": Path("/data/fzliang/reid-project/totalcapture/preprocessed/g6_totalcapture_source"),
-    "egohumans": Path("/data/fzliang/reid-project/egohumans/preprocessed/g6_egohumans_source"),
-}
-CUSTOM_ROOT = Path(
-    "/data/fzliang/reid-project/custom/preprocessed/hybrid_w24_session_out_rawcsv7d_swapsess"
-)
+SOURCE_ROOTS = PROFILES["g6"].source_roots
+CUSTOM_ROOT = PROFILES["g6"].custom_root
 CUSTOM_SEGMENT_ROOT = Path(
     "/data/fzliang/reid-project/custom/evaluation/custom_segments/sequences"
 )
@@ -25,6 +21,7 @@ CUSTOM_IMU_ROOT = Path("/data/fzliang/data/preprocess/2person")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--profile", choices=sorted(PROFILES), default="g6")
     return parser.parse_args()
 
 
@@ -60,8 +57,9 @@ def _custom_evaluation_artifacts(session: str) -> dict[str, Path]:
 def main() -> None:
     args = parse_args()
     output_dir = Path(args.output_dir).expanduser().resolve()
+    profile = get_profile(args.profile)
     manifests = []
-    for dataset, root in SOURCE_ROOTS.items():
+    for dataset, root in profile.source_roots.items():
         manifest = build_prepared_data_manifest(root, dataset=dataset)
         name = f"{dataset}.json"
         _write_json(output_dir / name, manifest)
@@ -69,7 +67,7 @@ def main() -> None:
 
     for fold_id, fold in CUSTOM_FOLDS.items():
         session = str(fold["test_session"])
-        root = CUSTOM_ROOT / f"fold{fold_id}_{session}"
+        root = profile.custom_root / f"fold{fold_id}_{session}"
         manifest = build_prepared_data_manifest(
             root,
             dataset="custom",
@@ -80,7 +78,7 @@ def main() -> None:
         _write_json(output_dir / name, manifest)
         manifests.append({"dataset": "custom", "fold_id": fold_id, "file": name, "manifest_hash": manifest["manifest_hash"]})
 
-    index = {"schema_version": "1.0", "manifests": manifests}
+    index = {"schema_version": "1.0", "profile": profile.name, "manifests": manifests}
     _write_json(output_dir / "index.json", index)
     print(output_dir / "index.json")
 
