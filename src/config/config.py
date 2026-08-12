@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import copy
 import os
+import warnings
+from ast import literal_eval
 from pathlib import Path
 from typing import Any, Dict, Union
 
 import yaml
-from yacs.config import CfgNode as CN
+
+try:
+    from yacs.config import CfgNode as CN
+except ImportError as exc:  # pragma: no cover - environment contract
+    raise ImportError(
+        "Re-id-Project requires 'yacs' for its workflow configuration. "
+        "Create the environment from environment.yml or install yacs."
+    ) from exc
+
 
 from .defaults import get_cfg_defaults
 
@@ -92,10 +102,16 @@ def _normalize_legacy(raw: Dict[str, Any]) -> Dict[str, Any]:
         test.pop("grouped_test", None)
 
     if isinstance(test, dict):
-        # Deprecated test entrypoints are intentionally ignored. Official
-        # evaluation is limited to FrameAcc and Group Test.
+        # Deprecated test entrypoints are removed after an explicit warning.
+        # Official evaluation is limited to FrameAcc and Group Test.
         for key in ("matcher", "synchronous_test", "eval_mode", "mode", "chunk_windows", "window_size", "stride"):
-            test.pop(key, None)
+            if key in test:
+                warnings.warn(
+                    f"Deprecated test config field {key!r} is ignored; configure test.metrics instead.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+                test.pop(key)
 
     train = data.get("train") if isinstance(data.get("train"), dict) else data.get("TRAIN")
     if isinstance(train, dict) and isinstance(train.get("model"), dict):
@@ -118,6 +134,20 @@ def _normalize_legacy(raw: Dict[str, Any]) -> Dict[str, Any]:
             upper_key = key.upper()
             if upper_key in slice_cfg:
                 slice_cfg[upper_key] = _as_string_tuple(slice_cfg[upper_key])
+
+    experiment = data.get("experiment") if isinstance(data.get("experiment"), dict) else data.get("EXPERIMENT")
+    if isinstance(experiment, dict):
+        for key in ("test_session", "TEST_SESSION"):
+            value = experiment.get(key)
+            if isinstance(value, str):
+                try:
+                    decoded = literal_eval(value)
+                except (SyntaxError, ValueError):
+                    decoded = value
+                if not isinstance(decoded, str):
+                    # YACS literal-evaluates every string during merge. Protect
+                    # numeric-looking identifiers such as 20260211_171423.
+                    experiment[key] = repr(value)
 
     return data
 
@@ -153,6 +183,11 @@ def _normalize_hybrid_model_cfg(model: Dict[str, Any]) -> None:
     }
     for key in list(model.keys()):
         if str(key).lower() in legacy_keys:
+            warnings.warn(
+                f"Deprecated Hybrid model config field {key!r} is ignored.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
             model.pop(key, None)
 
 
@@ -172,14 +207,36 @@ def _merge_present_sections(cfg: CN, raw_upper: Dict[str, Any]) -> None:
     This preserves optional stage semantics. For example, missing EXTRACT means
     ExtractStage can still skip instead of being created by defaults.
     """
-    always = {"PROJECT", "WORK_DIR", "ROOT_DIR", "PATHS"}
+    unknown = sorted(set(raw_upper) - set(cfg))
+    if unknown:
+        raise KeyError(
+            f"Unknown top-level config section(s): {unknown}. "
+            f"Allowed sections: {sorted(cfg.keys())}"
+        )
     for key, value in raw_upper.items():
-        if key in always or key in cfg:
-            cfg.merge_from_other_cfg(CN({key: value}))
-        else:
-            cfg.set_new_allowed(True)
-            cfg.merge_from_other_cfg(CN({key: value}))
-            cfg.set_new_allowed(False)
+        cfg.merge_from_other_cfg(CN({key: _coerce_legacy_types(value, cfg[key])}))
+
+
+def _coerce_legacy_types(value: Any, template: Any) -> Any:
+    """Coerce only unambiguous legacy scalar spellings before YACS merge."""
+    if isinstance(value, dict) and isinstance(template, (dict, CN)):
+        output = {}
+        for key, child in value.items():
+            canonical = str(key).upper()
+            child_template = template[canonical] if canonical in template else None
+            output[key] = (
+                _coerce_legacy_types(child, child_template)
+                if child_template is not None
+                else child
+            )
+        return output
+    if isinstance(template, bool) and isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return value
 
 
 def _data_home(cfg: CN) -> Path:
@@ -247,6 +304,7 @@ def _normalize_known_output_paths(cfg: CN, data_home: Path) -> None:
         ("PREPROCESS", "EXTRACTED_ROOT"),
         ("PREPROCESS", "POSE2D_OUTPUT_ROOT"),
         ("PREPROCESS", "OUTPUT"),
+        ("PREPROCESS", "PREPARED_ROOT"),
         ("EXTRACT", "MANIFEST_CSV"),
         ("EXTRACT", "RESULTS_ROOT"),
         ("EXTRACT", "COPY_FROM"),
@@ -285,9 +343,15 @@ def _resolve_paths(cfg: CN) -> CN:
     dataset_name = _dataset_dir_name(cfg.PREPROCESS.DATASET)
     dataset_home = data_home / dataset_name
     preprocessed_dir = dataset_home / "preprocessed" / project
+    if bool(cfg.PREPROCESS.REUSE_PREPARED):
+        prepared_root = str(cfg.PREPROCESS.PREPARED_ROOT or "").strip()
+        if not prepared_root:
+            raise ValueError("PREPROCESS.REUSE_PREPARED=true requires PREPROCESS.PREPARED_ROOT")
+        preprocessed_dir = Path(prepared_root).expanduser()
+        if not preprocessed_dir.is_absolute():
+            preprocessed_dir = Path(_resolve_project_data_path(str(preprocessed_dir), data_home))
+        preprocessed_dir = preprocessed_dir.resolve()
     skeleton_dir = dataset_home / "skeleton" / str(cfg.EXTRACT.POSE_ESTIMATOR or "alphapose").strip().lower()
-    imu_source = str(cfg.PREPROCESS.IMU_SOURCE or "raw").strip().lower() or "raw"
-    imu_dir = dataset_home / "imu" / imu_source
     artifacts_dir = dataset_home / "artifacts" / project
 
     work_dir = Path(cfg.WORK_DIR).expanduser() if cfg.WORK_DIR else preprocessed_dir

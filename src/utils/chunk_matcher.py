@@ -80,7 +80,7 @@ def run_chunk_trials(
 
         mean_sim += sim
         r, c = linear_sum_assignment(-sim)
-        for rr, cc in zip(r, c):
+        for rr, cc in zip(r, c, strict=True):
             counts[int(rr), int(cc)] += 1
 
     pair_prob = (counts / float(max(num_trials, 1))).tolist()

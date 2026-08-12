@@ -1,5 +1,5 @@
 # ByteTrack tracker / detector subprocess config
-bytetrack_root: /home/fzliang/Autism-project/third-party/ByteTrack
+bytetrack_root: ${BYTETRACK_ROOT}
 bytetrack_python: python3
 bytetrack_exp_file: exps/example/mot/yolox_x_mix_det.py
-bytetrack_ckpt: /home/fzliang/ByteTrack/pretrained/bytetrack_x_mot17.pth.tar
+bytetrack_ckpt: ${BYTETRACK_CKPT}

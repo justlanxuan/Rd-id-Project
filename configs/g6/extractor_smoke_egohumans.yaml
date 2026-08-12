@@ -1,0 +1,21 @@
+project: g6_extractor_smoke_egohumans
+
+extract:
+  detector: alphapose
+  tracker: alphapose
+  pose_estimator: alphapose
+  video: /data/fzliang/reid-project/g6/extractor_smoke_inputs/egohumans.mp4
+  results_root: /data/fzliang/reid-project/g6/extractor_smoke_outputs/egohumans
+  alphapose_root: /home/fzliang/repo/AlphaPose
+  alphapose_python: /home/fzliang/repo/AlphaPose/venv/bin/python
+  alphapose_cfg: configs/coco/resnet/256x192_res50_lr1e-3_1x.yaml
+  alphapose_ckpt: /home/fzliang/repo/AlphaPose/pretrained_models/fast_res50_256x192.pth
+  gpu: 1
+  detbatch: 1
+  posebatch: 16
+  headless: true
+  reuse_existing: false
+  force: true
+  invalid_cache_policy: reextract
+  merge_tracklets:
+    enabled: false

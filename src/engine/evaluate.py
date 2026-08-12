@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
@@ -24,13 +23,16 @@ import torch.nn.functional as F
 from scipy.optimize import linear_sum_assignment
 from torch.utils.data import DataLoader
 
-from src.config import load_cfg
-from src.preprocess.datasets.custom import (
+from preprocess.datasets.custom import (
     legacy_imu48_sensor_to_7d,
     load_custom_rawcsv_7d_sequence,
     load_custom_split_7d_sequence,
 )
+from src.config import load_cfg
 from src.datasets import WindowAlignmentDataset
+from src.experiments import write_evaluation_run_record
+from src.metrics import EmbeddingBundle, build_metric
+from src.models.checkpoint import load_model_checkpoint
 from src.modules.encoders.hybrid import imu_sequence_features, raw_pose_sequence, skeleton_tokens
 
 
@@ -52,22 +54,6 @@ def read_csv_rows(path: str | Path) -> List[Dict[str, str]]:
     return rows
 
 
-def cosine_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    a = np.asarray(a, dtype=np.float32)
-    b = np.asarray(b, dtype=np.float32)
-    a = a / np.clip(np.linalg.norm(a, axis=1, keepdims=True), 1e-12, None)
-    b = b / np.clip(np.linalg.norm(b, axis=1, keepdims=True), 1e-12, None)
-    return a @ b.T
-
-
-def pair_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    n = min(len(a), len(b))
-    if n <= 0:
-        return -1.0
-    sim = cosine_matrix(a[:n], b[:n])
-    return float(np.mean(np.diag(sim)))
-
-
 def model_similarity_matrix(
     model,
     imu_emb: torch.Tensor,
@@ -82,24 +68,31 @@ def model_similarity_matrix(
     return (float(cosine_weight) * cosine + float(pair_logit_weight) * pair_logits).detach().cpu().numpy()
 
 
-@dataclass
-class EmbeddingBundle:
-    rows: List[Dict[str, str]]
-    imu: np.ndarray
-    video: np.ndarray
-
-
 def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> EmbeddingBundle:
     T = cfg.TRAIN
     P = cfg.PATHS
     TEST = cfg.TEST
     IMU_PRE = cfg.PREPROCESS.IMU
-    is_hybrid = str(T.MODEL.TYPE).lower() == "hybrid"
+
+    from src.engine.common import build_alignment_model_from_cfg
+
+    model, model_name = build_alignment_model_from_cfg(cfg, device)
+    report = load_model_checkpoint(model, model_name, checkpoint, strict=False)
+    if report.missing_keys or report.unexpected_keys:
+        print(
+            f"[WARN] checkpoint loaded with missing={len(report.missing_keys)}, "
+            f"unexpected={len(report.unexpected_keys)}"
+        )
+    model.eval()
 
     imu_mean = None
     imu_std = None
-    imu_stats_json = "" if is_hybrid else _resolve_imu_stats(cfg, checkpoint)
-    if (not is_hybrid) and imu_stats_json:
+    imu_stats_json = (
+        _resolve_imu_stats(cfg, checkpoint)
+        if model.capabilities.external_imu_normalization
+        else ""
+    )
+    if imu_stats_json:
         stats = json.loads(Path(imu_stats_json).read_text())
         imu_mean = np.asarray(stats["imu_mean"], dtype=np.float32)
         imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
@@ -124,30 +117,6 @@ def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> Embedding
         num_workers=int(TEST.NUM_WORKERS or T.NUM_WORKERS),
         pin_memory=True,
     )
-
-    from src.engine.common import build_alignment_model_from_cfg, _adapt_legacy_hybrid_state_dict
-
-    model, _ = build_alignment_model_from_cfg(cfg, device)
-    ckpt = torch.load(checkpoint, map_location="cpu")
-    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-    state = _adapt_legacy_hybrid_state_dict(state)
-    if isinstance(ckpt, dict) and isinstance(ckpt.get("stats"), dict):
-        stats = ckpt["stats"]
-        stat_map = {
-            "raw_mu": "video_encoder.raw_mu",
-            "raw_sd": "video_encoder.raw_sd",
-            "vec_mu": "video_encoder.vec_mu",
-            "vec_sd": "video_encoder.vec_sd",
-            "imu_mu": "imu_encoder.imu_mu",
-            "imu_sd": "imu_encoder.imu_sd",
-        }
-        for src_key, dst_key in stat_map.items():
-            if src_key in stats:
-                state[dst_key] = torch.as_tensor(stats[src_key], dtype=torch.float32)
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    if missing or unexpected:
-        print(f"[WARN] checkpoint loaded with missing={len(missing)}, unexpected={len(unexpected)}")
-    model.eval()
 
     imu_all: List[np.ndarray] = []
     video_all: List[np.ndarray] = []
@@ -201,94 +170,6 @@ def _resolve_imu_stats(cfg, checkpoint: Path) -> str:
     return str(sibling) if sibling.exists() else ""
 
 
-class FrameAccEvaluator:
-    """Per-window assignment accuracy shared by all datasets.
-
-    Rows with the same `(npz_path, session, window_start, window_end)` form one
-    candidate set. Each row represents an aligned IMU/person pair, so the
-    correct assignment is the diagonal after deterministic row sorting. The IMU
-    side is shuffled before Hungarian matching by default to avoid identity
-    tie-breaking shortcuts.
-    """
-
-    def __init__(self, shuffle_match: bool = True, seed: int = 42) -> None:
-        self.shuffle_match = shuffle_match
-        self.seed = seed
-
-    @staticmethod
-    def _group_key(row: Dict[str, str]) -> tuple[str, str, int, int]:
-        return (
-            str(row.get("npz_path", "")),
-            str(row.get("session", "")),
-            int(row["window_start"]),
-            int(row["window_end"]),
-        )
-
-    @staticmethod
-    def _sort_key(item: tuple[int, Dict[str, str]]) -> tuple[int, int, str]:
-        _, row = item
-        return (
-            int(row.get("imu_idx", 0)),
-            int(row.get("person_idx", 0)),
-            str(row.get("subject", "")),
-        )
-
-    def evaluate(self, bundle: EmbeddingBundle) -> Dict[str, object]:
-        grouped: Dict[tuple[str, str, int, int], List[tuple[int, Dict[str, str]]]] = {}
-        for idx, row in enumerate(bundle.rows):
-            grouped.setdefault(self._group_key(row), []).append((idx, row))
-
-        rng = np.random.default_rng(self.seed)
-        total = 0
-        correct = 0
-        window_accs: List[float] = []
-        singleton = 0
-        evaluated = 0
-
-        for key in sorted(grouped):
-            items = sorted(grouped[key], key=self._sort_key)
-            if len(items) < 2:
-                # A one-candidate window is a valid but non-discriminative
-                # FrameAcc case. Count it explicitly instead of silently
-                # dropping single-person datasets from the metric.
-                singleton += 1
-                correct += 1
-                total += 1
-                window_accs.append(1.0)
-                evaluated += 1
-                continue
-
-            indices = np.asarray([idx for idx, _ in items], dtype=np.int64)
-            sim = cosine_matrix(bundle.imu[indices], bundle.video[indices])
-            if self.shuffle_match:
-                perm = rng.permutation(len(indices))
-                sim_for_match = sim[perm]
-            else:
-                perm = np.arange(len(indices))
-                sim_for_match = sim
-
-            row_ind, col_ind = linear_sum_assignment(-sim_for_match)
-            n_correct = int(np.sum(perm[row_ind] == col_ind))
-            n_total = int(len(indices))
-            correct += n_correct
-            total += n_total
-            window_accs.append(float(n_correct / max(n_total, 1)))
-            evaluated += 1
-
-        return {
-            "method": "frame_acc",
-            "num_candidate_windows": int(len(grouped)),
-            "num_evaluated_windows": int(evaluated),
-            "num_singleton_windows": int(singleton),
-            "num_assignments": int(total),
-            "correct_assignments": int(correct),
-            "frame_acc": float(correct / max(total, 1)),
-            "mean_window_acc": float(np.mean(window_accs)) if window_accs else 0.0,
-            "std_window_acc": float(np.std(window_accs)) if window_accs else 0.0,
-            "shuffle_match": bool(self.shuffle_match),
-        }
-
-
 def load_skeleton_json(path: Path, tlen: int) -> np.ndarray:
     entries = json.loads(path.read_text())
     track_ids = sorted({int(e["idx"]) for e in entries})
@@ -323,6 +204,32 @@ def compute_segment_frameacc_counts(npz_data, frame_assignments: np.ndarray) -> 
             if len(matched) == 1 and int(imu_ids[int(matched[0])]) == int(gt_person_ids[g]):
                 correct += 1
     return float(correct / total) if total else 0.0, int(correct), int(total)
+
+
+def aggregate_segment_sessions(
+    clips: List[Dict[str, object]],
+    sessions: List[str],
+) -> Dict[str, Dict[str, object]]:
+    """Aggregate raw segment counts without reinterpreting clip accuracy."""
+    per_session: Dict[str, Dict[str, object]] = {}
+    for session in sessions:
+        session_clips = [
+            clip for clip in clips if f"custom_{session}_seg" in str(clip["sequence_id"])
+        ]
+        session_correct = sum(int(clip["correct"]) for clip in session_clips)
+        session_total = sum(int(clip["total"]) for clip in session_clips)
+        per_session[session] = {
+            "num_clips": int(len(session_clips)),
+            "correct": int(session_correct),
+            "total": int(session_total),
+            "frame_acc": float(session_correct / session_total) if session_total else 0.0,
+            "mean_clip_frame_acc": (
+                float(np.mean([float(clip["frame_acc"]) for clip in session_clips]))
+                if session_clips
+                else 0.0
+            ),
+        }
+    return per_session
 
 
 def load_segment_eval_inputs(
@@ -410,28 +317,19 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
     if not sessions:
         raise ValueError("FrameAcc segment mode requires TEST.METRICS.FRAME_ACC.SESSIONS or SLICE.TEST_SESSIONS.")
 
-    from src.engine.common import build_alignment_model_from_cfg, _adapt_legacy_hybrid_state_dict
+    from src.engine.common import build_alignment_model_from_cfg
 
-    model, _ = build_alignment_model_from_cfg(cfg, device)
-    ckpt = torch.load(checkpoint, map_location="cpu")
-    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-    state = _adapt_legacy_hybrid_state_dict(state)
-    if isinstance(ckpt, dict) and isinstance(ckpt.get("stats"), dict):
-        stats = ckpt["stats"]
-        stat_map = {
-            "raw_mu": "video_encoder.raw_mu",
-            "raw_sd": "video_encoder.raw_sd",
-            "vec_mu": "video_encoder.vec_mu",
-            "vec_sd": "video_encoder.vec_sd",
-            "imu_mu": "imu_encoder.imu_mu",
-            "imu_sd": "imu_encoder.imu_sd",
-        }
-        for src_key, dst_key in stat_map.items():
-            if src_key in stats:
-                state[dst_key] = torch.as_tensor(stats[src_key], dtype=torch.float32)
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    if missing or unexpected:
-        print(f"[WARN] checkpoint loaded with missing={len(missing)}, unexpected={len(unexpected)}")
+    model, model_name = build_alignment_model_from_cfg(cfg, device)
+    report = load_model_checkpoint(model, model_name, checkpoint, strict=False)
+    if report.missing_keys or report.unexpected_keys:
+        print(
+            f"[WARN] checkpoint loaded with missing={len(report.missing_keys)}, "
+            f"unexpected={len(report.unexpected_keys)}"
+        )
+    if not model.capabilities.segment_frame_acc:
+        raise RuntimeError(
+            f"Model {model_name!r} does not declare segment_frame_acc capability."
+        )
     model.eval()
 
     window_size = int(frame_cfg.WINDOW_SIZE)
@@ -467,6 +365,7 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                     imu_feat_full = imu_sequence_features(imu_full, imu_smooth, imu_feature_mode)
             centers = []
             assignments = []
+            window_predictions = []
             for start in range(0, t_len - window_size + 1, stride):
                 end = start + window_size
                 active = np.where(visibility[start:end].any(axis=0))[0]
@@ -507,10 +406,20 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                         )
                 row_ind, col_ind = linear_sum_assignment(-sim)
                 assign = np.full(n_imu, -1, dtype=np.int64)
-                for r, c in zip(row_ind, col_ind):
+                for r, c in zip(row_ind, col_ind, strict=True):
                     assign[r] = int(active[c])
                 centers.append((start + end) // 2)
                 assignments.append(assign)
+                window_predictions.append(
+                    {
+                        "start": int(start),
+                        "end": int(end),
+                        "center": int((start + end) // 2),
+                        "active_extract_indices": active.astype(np.int64).tolist(),
+                        "similarity": np.asarray(sim, dtype=np.float64).tolist(),
+                        "imu_to_extract_assignment": assign.tolist(),
+                    }
+                )
 
             frame_assignments = np.full((t_len, n_imu), -1, dtype=np.int64)
             centers_arr = np.asarray(centers)
@@ -525,12 +434,20 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                 "correct": int(correct),
                 "total": int(clip_total),
                 "T": int(t_len),
+                "frame_ids": data["frame_ids"].astype(np.int64).tolist(),
+                "imu_ids": data["imu_ids"].astype(np.int64).tolist(),
+                "extract_person_ids": data["extract_person_ids"].astype(np.int64).tolist(),
+                "window_predictions": window_predictions,
+                "frame_assignments": frame_assignments.tolist(),
             })
             total_correct += correct
             total += clip_total
 
+    per_session = aggregate_segment_sessions(clips, sessions)
+
     return {
         "method": "frame_acc",
+        "prediction_schema_version": "1.0",
         "mode": "session_segments",
         "segment_root": str(segment_root),
         "custom_imu_root": "" if custom_imu_path is None else str(custom_imu_path),
@@ -543,6 +460,7 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
         "cosine_weight": float(cosine_weight),
         "pair_logit_weight": float(pair_logit_weight),
         "clips": clips,
+        "per_session": per_session,
         "correct": int(total_correct),
         "total": int(total),
         "frame_acc": float(np.mean([c["frame_acc"] for c in clips])) if clips else 0.0,
@@ -560,144 +478,6 @@ def _encode_hybrid_precomputed(model, raw: torch.Tensor, vec: torch.Tensor, imu:
     video = F.normalize(video, dim=1)
     imu_emb = F.normalize(imu_encoder.raw(imu), dim=1)
     return imu_emb, video
-
-
-class GroupTestEvaluator:
-    """Sampled group matching over sequence chunks."""
-
-    def __init__(
-        self,
-        group_sizes: List[int],
-        num_trials: int = 50,
-        chunk_windows: int = 30,
-        min_chunk_windows: int = 15,
-        seed: int = 42,
-        shuffle_match: bool = True,
-        per_subject_split: bool = False,
-    ) -> None:
-        self.group_sizes = group_sizes
-        self.num_trials = num_trials
-        self.chunk_windows = chunk_windows
-        self.min_chunk_windows = min_chunk_windows
-        self.seed = seed
-        self.shuffle_match = shuffle_match
-        self.per_subject_split = per_subject_split
-
-    def _build_units(self, bundle: EmbeddingBundle) -> List[Dict[str, object]]:
-        seq_map: Dict[str, Dict[str, List[np.ndarray]]] = {}
-        for idx, row in enumerate(bundle.rows):
-            seq_name = f"{row.get('subject', '')}_{row.get('session', '')}"
-            if seq_name not in seq_map:
-                seq_map[seq_name] = {"imu": [], "video": []}
-            seq_map[seq_name]["imu"].append(bundle.imu[idx])
-            seq_map[seq_name]["video"].append(bundle.video[idx])
-
-        units: List[Dict[str, object]] = []
-        for seq_name, seq_data in sorted(seq_map.items()):
-            imu_emb = np.stack(seq_data["imu"], axis=0)
-            video_emb = np.stack(seq_data["video"], axis=0)
-            n = min(len(imu_emb), len(video_emb))
-            if n < self.min_chunk_windows:
-                continue
-            start = 0
-            cid = 0
-            while start < n:
-                end = min(start + self.chunk_windows, n)
-                if end - start >= self.min_chunk_windows:
-                    units.append({
-                        "unit_id": f"{seq_name}_c{cid:03d}",
-                        "seq_name": seq_name,
-                        "subject": seq_name.split("_")[0],
-                        "imu_emb": imu_emb[start:end],
-                        "video_emb": video_emb[start:end],
-                    })
-                    cid += 1
-                start += self.chunk_windows
-        return units
-
-    def _eval_group(self, units: List[Dict[str, object]], group_size: int, seed: int) -> Dict[str, object]:
-        if len(units) < group_size:
-            return {
-                "group_size": int(group_size),
-                "num_units": int(len(units)),
-                "num_trials": 0,
-                "mean_acc": None,
-                "std_acc": None,
-                "mean_diag_sim": None,
-                "mean_offdiag_sim": None,
-                "note": f"insufficient units ({len(units)} < {group_size})",
-            }
-
-        rng = np.random.default_rng(seed)
-        trial_acc: List[float] = []
-        trial_diag: List[float] = []
-        trial_offdiag: List[float] = []
-
-        for _ in range(self.num_trials):
-            idx = rng.choice(len(units), size=group_size, replace=False)
-            selected = [units[i] for i in idx]
-            if self.shuffle_match and group_size > 1:
-                perm = rng.permutation(group_size)
-                imu_selected = [selected[perm[i]] for i in range(group_size)]
-            else:
-                perm = np.arange(group_size)
-                imu_selected = selected
-
-            sim = np.zeros((group_size, group_size), dtype=np.float32)
-            for i in range(group_size):
-                for j in range(group_size):
-                    sim[i, j] = pair_similarity(
-                        imu_selected[i]["imu_emb"],
-                        selected[j]["video_emb"],
-                    )
-            row_ind, col_ind = linear_sum_assignment(-sim)
-            correct = np.sum(perm[row_ind] == col_ind) if self.shuffle_match else np.sum(row_ind == col_ind)
-            trial_acc.append(float(correct) / float(group_size))
-            trial_diag.append(float(np.mean(np.diag(sim))))
-            if group_size > 1:
-                trial_offdiag.append(float(np.mean(sim[~np.eye(group_size, dtype=bool)])))
-
-        return {
-            "group_size": int(group_size),
-            "num_units": int(len(units)),
-            "num_trials": int(self.num_trials),
-            "mean_acc": float(np.mean(trial_acc)),
-            "std_acc": float(np.std(trial_acc)),
-            "mean_diag_sim": float(np.mean(trial_diag)),
-            "mean_offdiag_sim": float(np.mean(trial_offdiag)) if trial_offdiag else None,
-        }
-
-    def evaluate(self, bundle: EmbeddingBundle) -> Dict[str, object]:
-        units = self._build_units(bundle)
-        if self.per_subject_split:
-            by_subject: Dict[str, List[Dict[str, object]]] = {}
-            for unit in units:
-                by_subject.setdefault(str(unit["subject"]), []).append(unit)
-            sampled_units: List[Dict[str, object]] = []
-            rng = np.random.default_rng(self.seed)
-            for subject in sorted(by_subject):
-                subject_units = by_subject[subject]
-                if subject_units:
-                    sampled_units.append(subject_units[int(rng.integers(0, len(subject_units)))])
-            eval_units = sampled_units
-        else:
-            eval_units = units
-
-        results = [
-            self._eval_group(eval_units, group_size, self.seed + group_size)
-            for group_size in self.group_sizes
-        ]
-        return {
-            "method": "group_test",
-            "num_units": int(len(units)),
-            "num_eval_units": int(len(eval_units)),
-            "chunk_windows": int(self.chunk_windows),
-            "min_chunk_windows": int(self.min_chunk_windows),
-            "num_trials": int(self.num_trials),
-            "shuffle_match": bool(self.shuffle_match),
-            "per_subject_split": bool(self.per_subject_split),
-            "results": results,
-        }
 
 
 def parse_args() -> argparse.Namespace:
@@ -740,13 +520,16 @@ def main() -> None:
             output["evaluations"]["frame_acc"] = evaluate_segment_frameacc(cfg, checkpoint, device)
         else:
             assert bundle is not None
-            output["evaluations"]["frame_acc"] = FrameAccEvaluator(
+            output["evaluations"]["frame_acc"] = build_metric(
+                "frame_acc",
                 shuffle_match=bool(frame_cfg.SHUFFLE_MATCH),
                 seed=int(frame_cfg.SEED),
+                singleton_policy=str(frame_cfg.SINGLETON_POLICY),
             ).evaluate(bundle)
     if bool(group_cfg.ENABLED):
         assert bundle is not None
-        output["evaluations"]["group_test"] = GroupTestEvaluator(
+        output["evaluations"]["group_test"] = build_metric(
+            "group_test",
             group_sizes=parse_group_sizes(group_cfg.GROUP_SIZES),
             num_trials=int(group_cfg.NUM_TRIALS),
             chunk_windows=int(group_cfg.CHUNK_WINDOWS),
@@ -761,6 +544,16 @@ def main() -> None:
         out = Path(save_json)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(output, indent=2))
+        run_record = write_evaluation_run_record(
+            cfg,
+            checkpoint=checkpoint,
+            evaluation_output=output,
+            raw_results_path=out,
+            default_output_path=test_run_dir / "run_record.json",
+            repo_root=repo_root(),
+        )
+        if run_record is not None:
+            print(f"Run record: {run_record}")
 
 
 if __name__ == "__main__":

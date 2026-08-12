@@ -13,6 +13,6 @@ echo "Config: $CONFIG"
 echo "Stages: $STAGE"
 echo "Python: $PYTHON_BIN"
 
-"$PYTHON_BIN" -m src.pipeline --config "$CONFIG" --stages "$STAGE"
+"$PYTHON_BIN" "$PWD/run_pipeline.py" --config "$CONFIG" --stages "$STAGE"
 
 echo "=== Done ==="

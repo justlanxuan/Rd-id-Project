@@ -7,7 +7,12 @@ from typing import Dict
 import torch
 import torch.nn.functional as F
 
-from src.engine.batch import domain_labels_from_batch, group_labels_from_batch, move_to_device, subject_labels_from_batch
+from src.engine.batch import (
+    domain_labels_from_batch,
+    group_labels_from_batch,
+    move_to_device,
+    subject_labels_from_batch,
+)
 from src.engine.losses import (
     cross_pair_window_ce_loss,
     pair_anti_tie_loss_from_model,

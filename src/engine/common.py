@@ -2,61 +2,29 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 
 import torch
 
 from src.config import get_cfg_defaults
-from src.modules.encoders import HybridIMUEncoder, HybridSkeletonEncoder
+from src.models.checkpoint import load_model_checkpoint
+from src.models.registry import build_model
+from src.modules.encoders import HybridSkeletonEncoder
 from src.modules.matchers import IMUVideoMatcher, SymmetricInfoNCE
 
 
-def _adapt_legacy_hybrid_state_dict(state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Map legacy hybrid experiment checkpoint keys to production matcher keys."""
-    adapted: Dict[str, torch.Tensor] = {}
-    for key, value in state.items():
-        if key == "log_temp":
-            continue
-        if key.startswith("skel."):
-            adapted[f"video_encoder.{key[len('skel.'):]}"] = value
-        elif key.startswith("imu."):
-            adapted[f"imu_encoder.raw.{key[len('imu.'):]}"] = value
-        else:
-            adapted[key] = value
-    return adapted
-
-
-def _load_init_checkpoint(model: IMUVideoMatcher, checkpoint: str) -> None:
-    init_path = Path(checkpoint).expanduser()
-    if not init_path.exists():
-        raise FileNotFoundError(f"INIT_ALIGNMENT_CKPT not found: {init_path}")
-    raw = torch.load(str(init_path), map_location="cpu")
-    init_state = raw["model"] if isinstance(raw, dict) and "model" in raw else raw
-    init_state = _adapt_legacy_hybrid_state_dict(init_state)
-    if isinstance(raw, dict) and isinstance(raw.get("stats"), dict):
-        stats = raw["stats"]
-        stat_map = {
-            "raw_mu": "video_encoder.raw_mu",
-            "raw_sd": "video_encoder.raw_sd",
-            "vec_mu": "video_encoder.vec_mu",
-            "vec_sd": "video_encoder.vec_sd",
-            "imu_mu": "imu_encoder.imu_mu",
-            "imu_sd": "imu_encoder.imu_sd",
-        }
-        for src_key, dst_key in stat_map.items():
-            if src_key in stats:
-                init_state[dst_key] = torch.as_tensor(stats[src_key], dtype=torch.float32)
-    model_state = model.state_dict()
-    init_state = {
-        key: value
-        for key, value in init_state.items()
-        if key in model_state and tuple(model_state[key].shape) == tuple(value.shape)
-    }
-    missing, unexpected = model.load_state_dict(init_state, strict=False)
+def _load_init_checkpoint(model: IMUVideoMatcher, model_name: str, checkpoint: str) -> None:
+    report = load_model_checkpoint(
+        model,
+        model_name,
+        checkpoint,
+        allow_shape_mismatch=True,
+        strict=False,
+    )
     print(
-        f"Loaded INIT_ALIGNMENT_CKPT: {init_path} "
-        f"(missing={len(missing)}, unexpected={len(unexpected)})"
+        f"Loaded INIT_ALIGNMENT_CKPT: {report.checkpoint} "
+        f"(missing={len(report.missing_keys)}, unexpected={len(report.unexpected_keys)}, "
+        f"dropped={len(report.dropped_incompatible_keys)})"
     )
 
 
@@ -66,50 +34,11 @@ def build_alignment_model_from_cfg(
 ) -> Tuple[IMUVideoMatcher, str]:
     """Build the official hybrid IMU-video alignment model."""
     model_cfg = cfg.TRAIN.MODEL
-    model_type = str(getattr(model_cfg, "TYPE", "hybrid")).lower()
-    if model_type != "hybrid":
-        raise ValueError(
-            f"Unsupported TRAIN.MODEL.TYPE={model_cfg.TYPE!r}. "
-            "The production codebase currently supports only the hybrid encoder."
-        )
-
-    hidden = int(model_cfg.HYBRID_HIDDEN)
-    imu_encoder = HybridIMUEncoder(
-        hidden_size=hidden,
-        imu_smooth_kernel=int(model_cfg.HYBRID_IMU_SMOOTH),
-        feature_mode=str(model_cfg.HYBRID_IMU_FEATURE_MODE),
-        temporal_layers=int(model_cfg.HYBRID_TEMPORAL_LAYERS),
-        temporal_kernel=int(model_cfg.HYBRID_TEMPORAL_KERNEL),
-        temporal_mode=str(model_cfg.HYBRID_TEMPORAL_MODE),
-        dropout=float(model_cfg.HYBRID_DROPOUT),
-    )
-    video_encoder = HybridSkeletonEncoder(
-        hidden_size=hidden,
-        skeleton_smooth_kernel=int(model_cfg.HYBRID_SKELETON_SMOOTH),
-        image_height=float(model_cfg.HYBRID_IMAGE_HEIGHT),
-        image_width=float(model_cfg.HYBRID_IMAGE_WIDTH),
-        token_layers=int(model_cfg.HYBRID_TOKEN_LAYERS),
-        token_heads=int(model_cfg.HYBRID_TOKEN_HEADS),
-        temporal_layers=int(model_cfg.HYBRID_TEMPORAL_LAYERS),
-        temporal_kernel=int(model_cfg.HYBRID_TEMPORAL_KERNEL),
-        temporal_mode=str(model_cfg.HYBRID_TEMPORAL_MODE),
-        feature_mode=str(model_cfg.HYBRID_SKELETON_FEATURE_MODE),
-        dropout=float(model_cfg.HYBRID_DROPOUT),
-    )
-    model = IMUVideoMatcher(
-        imu_encoder=imu_encoder,
-        video_encoder=video_encoder,
-        num_domains=int(model_cfg.NUM_DOMAINS),
-        domain_hidden_dim=int(model_cfg.DOMAIN_HIDDEN_DIM),
-        pair_head=bool(model_cfg.PAIR_HEAD),
-        pair_hidden_dim=int(model_cfg.PAIR_HIDDEN_DIM),
-        cross_pair_head=bool(model_cfg.CROSS_PAIR_HEAD),
-        cross_pair_hidden_dim=int(model_cfg.CROSS_PAIR_HIDDEN_DIM),
-    ).to(device)
+    model, model_name = build_model(cfg, device)
 
     if model_cfg.INIT_ALIGNMENT_CKPT:
-        _load_init_checkpoint(model, str(model_cfg.INIT_ALIGNMENT_CKPT))
-    return model, "hybrid"
+        _load_init_checkpoint(model, model_name, str(model_cfg.INIT_ALIGNMENT_CKPT))
+    return model, model_name
 
 
 def build_alignment_model(
@@ -155,7 +84,8 @@ def build_optimizer(
 def build_loss_fn(
     temperature: float = 0.1,
     learn_temperature: bool = False,
-    device: torch.device = torch.device("cpu"),
+    device: torch.device | None = None,
 ) -> SymmetricInfoNCE:
     """Build InfoNCE loss function."""
-    return SymmetricInfoNCE(temperature=temperature, learn_temperature=learn_temperature).to(device)
+    target_device = device if device is not None else torch.device("cpu")
+    return SymmetricInfoNCE(temperature=temperature, learn_temperature=learn_temperature).to(target_device)

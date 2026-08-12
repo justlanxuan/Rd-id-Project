@@ -17,3 +17,9 @@ experiments/synthetic_imu_matching/*.npz
 .runbook/
 __pycache__/
 *.py[cod]
+
+# Local pre-refactor smoke outputs and archived one-off E28 configs are kept
+# on the workstation, but are not part of the reproducible G6 code snapshot.
+/tmp_*_out/
+/configs/_tmp_e28_*.yaml
+/configs/e28_augsrc_*.yaml

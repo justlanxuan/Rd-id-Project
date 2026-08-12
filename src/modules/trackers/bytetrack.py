@@ -1,22 +1,20 @@
-"""ByteTrack adapter for Autism-project.
+"""ByteTrack adapter for Re-id-Project.
 
 Supports both decoupled tracking (BaseTracker) and full subprocess mode.
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
-from src.core.registry import TRACKERS
-from src.preprocess.structures import Detection, Track
+from src.data import Detection, Track
 from src.modules.trackers.base import BaseTracker
 
 
@@ -24,7 +22,7 @@ from src.modules.trackers.base import BaseTracker
 class ByteTrackConfig:
     """Configuration for initializing a ByteTrack runtime adapter."""
 
-    repo_root: Optional[str] = "/home/fzliang/Autism-project/third-party/ByteTrack"
+    repo_root: Optional[str] = None
     expected_commit: Optional[str] = None
     strict_commit: bool = False
     frame_rate: int = 30
@@ -46,7 +44,6 @@ class ByteTrackConfig:
     python: str = sys.executable
 
 
-@TRACKERS.register("bytetrack")
 class ByteTrackTracker(BaseTracker):
     """Adapter around `yolox.tracker.byte_tracker.BYTETracker`.
 
@@ -80,7 +77,7 @@ class ByteTrackTracker(BaseTracker):
     @staticmethod
     def _resolve_repo_path(repo_root: Optional[str]) -> Optional[Path]:
         if not repo_root:
-            return None
+            raise ValueError("ByteTrackConfig.repo_root is required")
         repo_path = Path(repo_root).expanduser().resolve()
         if not repo_path.exists():
             raise FileNotFoundError(f"ByteTrack repo not found: {repo_path}")

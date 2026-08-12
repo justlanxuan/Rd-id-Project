@@ -68,7 +68,6 @@ def _normalize_pixels(xy: torch.Tensor, image_height: float, image_width: float)
 
 def _signed_angle_delta(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     delta = b - a
-    pi = torch.pi
     return torch.atan2(torch.sin(delta), torch.cos(delta))
 
 

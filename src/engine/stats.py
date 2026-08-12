@@ -59,7 +59,7 @@ def compute_imu_stats_from_train_csv(
 
     sums = np.zeros_like(list(per_source.values())[0][0])
     sq_sums = np.zeros_like(list(per_source.values())[0][1])
-    for s, sq, c in per_source.values():
+    for s, sq, _count in per_source.values():
         sums += s
         sq_sums += sq
 

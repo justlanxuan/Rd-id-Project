@@ -1,45 +1,52 @@
-# Benchmarks
+# Reproducible Benchmarks
 
-Official benchmark runs are configured under `configs/benchmarks/` and launched
-with `tools/run_benchmark.py`. The runner does not contain model logic; it
-materializes regular YAML files and calls the public train/evaluate entrypoints.
-When the benchmark YAML has a `prepare` section, `--run-all` also performs the
-configured data stages before training.
+The official three-dataset benchmark is G6. Its goal, formulation, plan,
+protocol, progress, data manifests, and final reports live under:
 
-Cross-dataset transfer SOTA:
-
-```bash
-python tools/run_benchmark.py \
-  --config configs/benchmarks/cross_dataset_transfer_sota.yaml
+```text
+experiments/G6:official_refactor_and_three_dataset_benchmark/
 ```
 
-For a non-training check:
+## Matrix
+
+| Condition | Training jobs | Evaluations |
+|---|---:|---:|
+| TotalCapture/EgoHumans source | 6 | 6 |
+| Source to Custom zero-shot | 0 | 24 |
+| Source to Custom fine-tune | 24 | 24 |
+| Custom direct LOSO | 12 | 12 |
+| Total | 42 | 66 |
+
+Every training condition uses seeds `0`, `42`, and `123`. Custom uses four
+held-out sessions and reports each session plus macro-session and
+micro/weighted FrameAcc.
+
+## Workflow
+
+1. Build byte-stable data manifests and inspect split/content statistics.
+2. Obtain explicit human confirmation of the protocol document.
+3. Create the immutable protocol record and hash.
+4. Generate all 108 protocol-bound configs.
+5. Generate and run two bounded, non-formal one-epoch smoke configs.
+6. Dry-run the dependency graph with an explicit GPU list.
+7. Execute/resume the formal graph; never overwrite invalid artifacts.
+8. Validate all 66 run records and aggregate results automatically.
+
+Run `python -m tools.g6.<command> --help` for exact arguments:
 
 ```bash
-python tools/run_benchmark.py \
-  --config configs/benchmarks/cross_dataset_transfer_sota.yaml \
-  --check-inputs \
-  --generate \
-  --include-controls \
-  --dry-run
+python -m tools.g6.build_data_manifests --help
+python -m tools.g6.lock_protocol --help
+python -m tools.g6.build_configs --help
+python -m tools.g6.build_smoke_configs --help
+python -m tools.g6.run_jobs --help
+python -m tools.g6.aggregate_results --help
 ```
 
-This benchmark trains the source checkpoint from scratch, fine-tunes each target
-fold/seed from that checkpoint, evaluates the strict segment FrameAcc metric,
-and writes `summary.json` under the benchmark output root.
+The runner accepts only a locked protocol record. Completion is based on
+validated checkpoint/run-record contents and hashes, not path existence. A
+partial or corrupt artifact stops the run for human inspection.
 
-The cross-dataset SOTA config is a full pipeline config:
-
-1. EgoHumans source prepare: raw/extracted EgoHumans arrays -> source cache.
-2. Custom target prepare: raw custom video/IMU annotations -> video manifest.
-3. Custom skeleton extraction: manifest videos -> `skeleton.json`.
-4. Custom segment packing: preprocessed IMU/bboxes + `skeleton.json` ->
-   `custom_segments/sequences/custom_*.npz`.
-5. Custom slicing: segment NPZs + custom IMU split files -> fold caches.
-6. Source training, target transfer/control training, evaluation, summary.
-
-All stage paths and scheduling defaults live in
-`configs/benchmarks/cross_dataset_transfer_sota.yaml`, including GPUs,
-parallelism, controls, and skip policy. If source cache, target segment NPZs,
-or target fold caches already exist and `skip_existing` is true in the config,
-the prepare stage reuses them.
+`configs/benchmarks/cross_dataset_transfer_sota.yaml` and the former
+`tools/run_benchmark.py` workflow describe an older experimental protocol and
+must not be mixed with G6 results.

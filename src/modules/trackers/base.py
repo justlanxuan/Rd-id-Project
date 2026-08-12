@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 
-from src.preprocess.structures import Detection, Track
+from src.data import Detection, Track
 
 
 class BaseTracker(ABC):

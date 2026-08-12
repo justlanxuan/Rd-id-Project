@@ -1,5 +1,5 @@
 # AlphaPose SPPE (decoupled pose-only) config
-alphapose_root: /home/fzliang/Autism-project/third-party/AlphaPose
+alphapose_root: ${ALPHAPOSE_ROOT}
 alphapose_python: python
 alphapose_cfg: configs/coco/resnet/256x192_res50_lr1e-3_1x.yaml
-alphapose_ckpt: /home/fzliang/Autism-project/third-party/AlphaPose/pretrained_models/fast_res50_256x192.pth
+alphapose_ckpt: ${ALPHAPOSE_CKPT}

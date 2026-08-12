@@ -1,4 +1,4 @@
-"""Abstract pose-estimator interface for Autism-project."""
+"""Abstract pose-estimator interface for Re-id-Project."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import List
 
 import numpy as np
 
-from src.preprocess.structures import Pose, Track
+from src.data import Pose, Track
 
 
 class BasePoseEstimator(ABC):

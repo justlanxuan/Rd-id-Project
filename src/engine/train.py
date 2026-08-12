@@ -24,6 +24,7 @@ from src.engine.batch import (
     parse_domain_label_map,
     subject_labels_from_batch,
 )
+from src.engine.checkpoint_selection import resolve_selection_metric, selection_value_and_score
 from src.engine.losses import (
     cross_pair_window_ce_loss,
     pair_anti_tie_loss_from_model,
@@ -36,6 +37,7 @@ from src.engine.losses import (
 )
 from src.engine.stats import compute_imu_stats_from_train_csv, count_trainable_params, fit_hybrid_encoder_stats
 from src.engine.validation import evaluate_epoch
+from src.models.checkpoint import checkpoint_scalar, model_checkpoint_metadata
 from src.modules.domain import dann_alpha_schedule
 
 
@@ -66,7 +68,6 @@ def main() -> None:
     T = cfg.TRAIN
     P = cfg.PATHS
     IMU_PRE = cfg.PREPROCESS.IMU
-    is_hybrid = str(T.MODEL.TYPE).lower() == "hybrid"
     # Set random seeds
     seed = int(T.SEED)
     torch.manual_seed(seed)
@@ -80,16 +81,18 @@ def main() -> None:
         # torch.backends.cudnn.benchmark = False
     device = torch.device(T.DEVICE if torch.cuda.is_available() else "cpu")
 
+    from src.engine.common import build_alignment_model_from_cfg, build_loss_fn, build_optimizer
+
+    model, cfg_name = build_alignment_model_from_cfg(cfg, device)
+    capabilities = model.capabilities
+
     imu_mean = None
     imu_std = None
-    if is_hybrid:
-        imu_mean = None
-        imu_std = None
-    elif T.IMU_STATS_JSON:
+    if capabilities.external_imu_normalization and T.IMU_STATS_JSON:
         stats = json.loads(Path(T.IMU_STATS_JSON).read_text())
         imu_mean = np.asarray(stats["imu_mean"], dtype=np.float32)
         imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
-    elif T.COMPUTE_IMU_STATS:
+    elif capabilities.external_imu_normalization and T.COMPUTE_IMU_STATS:
         imu_mean, imu_std = compute_imu_stats_from_train_csv(
             P.TRAIN_CSV,
             P.DATA_ROOT,
@@ -169,7 +172,7 @@ def main() -> None:
         )
     val_loader = None
     if val_ds is not None:
-        val_batch_size = len(val_ds) if is_hybrid else T.BATCH_SIZE
+        val_batch_size = len(val_ds) if capabilities.full_validation_batch else T.BATCH_SIZE
         val_loader = DataLoader(
             val_ds,
             batch_size=val_batch_size,
@@ -179,9 +182,6 @@ def main() -> None:
             drop_last=False,
         )
 
-    from src.engine.common import build_alignment_model_from_cfg, build_optimizer, build_loss_fn
-
-    model, cfg_name = build_alignment_model_from_cfg(cfg, device)
     if bool(getattr(T, "CROSS_PAIR_TRAIN_ONLY", False)):
         if getattr(model, "cross_pair_head", None) is None:
             raise ValueError("TRAIN.CROSS_PAIR_TRAIN_ONLY requires TRAIN.MODEL.CROSS_PAIR_HEAD=true.")
@@ -229,11 +229,10 @@ def main() -> None:
         learn_temperature=T.LEARN_TEMPERATURE,
         device=device,
     )
-    if is_hybrid and T.LEARN_TEMPERATURE and T.MODEL.INIT_ALIGNMENT_CKPT:
-        init_payload = torch.load(str(T.MODEL.INIT_ALIGNMENT_CKPT), map_location="cpu", weights_only=False)
-        init_state = init_payload["model"] if isinstance(init_payload, dict) and "model" in init_payload else init_payload
-        if isinstance(init_state, dict) and "log_temp" in init_state and hasattr(loss_fn, "log_temperature"):
-            init_log_temp = torch.as_tensor(init_state["log_temp"], dtype=torch.float32)
+    if T.LEARN_TEMPERATURE and T.MODEL.INIT_ALIGNMENT_CKPT:
+        init_log_temp = checkpoint_scalar(str(T.MODEL.INIT_ALIGNMENT_CKPT), "log_temp")
+        if init_log_temp is not None and hasattr(loss_fn, "log_temperature"):
+            init_log_temp = init_log_temp.to(dtype=torch.float32)
             with torch.no_grad():
                 loss_fn.log_temperature.copy_(init_log_temp.to(loss_fn.log_temperature.device))
             print(f"[INFO] Initialized learnable loss log-temperature from checkpoint: {float(init_log_temp):.6f}")
@@ -254,12 +253,12 @@ def main() -> None:
     save_dir = resolve_save_dir(cfg)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    if (not is_hybrid) and imu_mean is not None and imu_std is not None:
+    if capabilities.external_imu_normalization and imu_mean is not None and imu_std is not None:
         (save_dir / "imu_stats.json").write_text(
             json.dumps({"imu_mean": imu_mean.tolist(), "imu_std": imu_std.tolist()}, indent=2)
         )
 
-    if is_hybrid:
+    if capabilities.fitted_input_stats:
         fit_hybrid_encoder_stats(model, train_ds, batch_size=min(int(T.BATCH_SIZE), 64))
 
     val_count = len(val_ds) if val_ds is not None else 0
@@ -270,7 +269,13 @@ def main() -> None:
 
     epoch_logs = []
 
-    best_val = float("-inf")
+    selection_metric = resolve_selection_metric(
+        str(getattr(T, "BEST_METRIC", "auto")),
+        capabilities,
+        has_validation=val_loader is not None,
+    )
+    best_selection_score = float("-inf")
+    best_metric_value = None
     epochs_no_improve = 0
     stopped_epoch = T.EPOCHS
     for epoch in range(1, T.EPOCHS + 1):
@@ -404,6 +409,12 @@ def main() -> None:
                     f"pair={running_pair_loss / steps:.4f} "
                     f"top1={running_acc / steps:.4f}"
                 )
+            if T.MAX_STEPS_PER_EPOCH > 0 and step >= T.MAX_STEPS_PER_EPOCH:
+                print(
+                    f"[SMOKE] Stopping epoch after {step} steps "
+                    f"(TRAIN.MAX_STEPS_PER_EPOCH={T.MAX_STEPS_PER_EPOCH})."
+                )
+                break
 
         val_metrics = evaluate_epoch(
             model,
@@ -454,35 +465,25 @@ def main() -> None:
         with (save_dir / "epoch_metrics.jsonl").open(mode, encoding="utf-8") as f:
             f.write(json.dumps(epoch_logs[-1], ensure_ascii=True) + "\n")
 
+        metric_value, selection_score = selection_value_and_score(selection_metric, val_metrics, train_top1)
         payload = {
+            **model_checkpoint_metadata(cfg_name, model),
             "epoch": epoch,
             "config": cfg.dump(sort_keys=False),
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "val_top1": val_metrics["top1"],
+            "selection_metric": selection_metric,
+            "selection_value": metric_value,
+            "selection_score": selection_score,
         }
         torch.save(payload, save_dir / "last.pt")
         if T.SAVE_EVERY_EPOCH:
             torch.save(payload, save_dir / f"epoch_{epoch:03d}.pt")
 
-        best_metric = str(getattr(T, "BEST_METRIC", "auto")).lower()
-        if best_metric == "auto":
-            if is_hybrid and val_loader is not None:
-                # E21 selected checkpoints by minimum validation InfoNCE loss.
-                # Keep that as the default for compatibility.
-                score_for_best = -float(val_metrics["loss"])
-            else:
-                score_for_best = val_metrics["top1"] if val_loader is not None else train_top1
-        elif best_metric == "val_loss":
-            score_for_best = -float(val_metrics["loss"])
-        elif best_metric == "val_top1":
-            score_for_best = float(val_metrics["top1"])
-        elif best_metric == "train_top1":
-            score_for_best = float(train_top1)
-        else:
-            raise ValueError(f"Unsupported TRAIN.BEST_METRIC={T.BEST_METRIC!r}")
-        if score_for_best > best_val + T.EARLY_STOP_MIN_DELTA:
-            best_val = score_for_best
+        if selection_score > best_selection_score + T.EARLY_STOP_MIN_DELTA:
+            best_selection_score = selection_score
+            best_metric_value = metric_value
             epochs_no_improve = 0
             torch.save(payload, save_dir / "best.pt")
         else:
@@ -493,9 +494,18 @@ def main() -> None:
             stopped_epoch = epoch
             break
 
-    metrics = {"best_val_top1": best_val, "stopped_epoch": stopped_epoch, "save_dir": str(save_dir)}
+    metrics = {
+        "selection_metric": selection_metric,
+        "best_metric_value": best_metric_value,
+        "best_selection_score": best_selection_score,
+        "stopped_epoch": stopped_epoch,
+        "save_dir": str(save_dir),
+    }
     (save_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
-    print(f"Training complete. Best val top1={best_val:.4f} (stopped at epoch {stopped_epoch})")
+    print(
+        f"Training complete. Best {selection_metric}={best_metric_value:.4f} "
+        f"(selection score={best_selection_score:.4f}, stopped at epoch {stopped_epoch})"
+    )
 
 
 if __name__ == "__main__":

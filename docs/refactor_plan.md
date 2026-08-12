@@ -1,64 +1,49 @@
-# Refactor Plan for Official Open-Source Readiness
+# Production Refactor Plan
 
-This document records the low-risk refactor plan for making the repository easier
-to understand, extend, and maintain in multi-developer workflows without changing
-the current training and evaluation behavior.
-
-## Goals
-
-- Keep the official pipeline behavior unchanged.
-- Make the official entrypoints obvious.
-- Separate production code from experiment artifacts.
-- Make dataset, preprocessing, training, and model boundaries explicit.
-- Preserve legacy import paths while introducing clearer module names.
-
-## Target Boundaries
+The authoritative refactor and experiment plan is:
 
 ```text
-src/pipeline.py        # Official workflow entrypoint.
-src/config/            # Defaults, config loading, path resolution.
-src/preprocess/        # Raw dataset -> standardized NPZ/CSV.
-src/datasets/          # Standardized NPZ/CSV -> PyTorch Dataset/DataLoader.
-src/engine/            # Train/evaluate orchestration and engine helpers.
-src/modules/           # Models, encoders, matchers, losses.
-src/utils/             # Small shared utilities.
-experiments/           # One-off research scripts, reports, and ablations.
-configs/official/      # Recommended reproducible configs.
-configs/examples/      # Small smoke-test configs.
-configs/experiments/   # Sweep and ablation configs.
+experiments/G6:official_refactor_and_three_dataset_benchmark/plan.md
 ```
 
-## Minimal Refactor Steps
+This short document records the stable architectural decisions that should
+survive individual experiments.
 
-1. Document the official structure and keep README aligned with the actual tree.
-2. Split `src/datasets/alignment_dataset.py` into focused dataset modules:
-   - `alignment.py`: `WindowAlignmentDataset`
-   - `transforms.py`: IMU filtering and legacy single-sensor conversion
-   - `samplers.py`: dataset-aware batch samplers
-   - keep `alignment_dataset.py` as a compatibility shim
-3. Extract focused helpers from `src/engine/train.py`:
-   - `batch.py`: moving batches to device and converting metadata to labels
-   - `losses.py`: training-specific contrastive and pair losses
-   - `stats.py`: IMU and hybrid encoder statistics
-4. Keep public behavior stable:
-   - no config semantics changes
-   - no checkpoint key changes
-   - no default stage changes
-   - no removal of old import paths in this pass
-5. Add smoke checks after each refactor:
-   - Python bytecode compile for touched modules
-   - import checks for old and new dataset paths
-   - config load checks for representative configs
+## Public contract
 
-## Follow-Up Cleanup
+- one root CLI: `run_pipeline.py`;
+- three public stages: `preprocess`, `train`, `test`;
+- one configuration loader and path resolver;
+- one canonical sequence/window format;
+- independent registries for dataset adapters, extractors, models, metrics,
+  and workflow stages;
+- immutable run records and machine-generated aggregation.
 
-These are intentionally not bundled into the first code refactor because they
-touch many files and should be reviewed separately.
+## Dependency direction
 
-- Move official configs into `configs/official/` and smoke configs into
-  `configs/examples/`.
-- Move `_tmp_*.yaml`, seed sweeps, and ablation configs into
-  `configs/experiments/` or keep them untracked.
-- Remove tracked `__pycache__` and generated files.
-- Add `pyproject.toml`, formatter/linter settings, and a small `tests/` suite.
-- Ensure experiment scripts do not become dependencies of `src/`.
+```text
+DatasetAdapter -> canonical artifact -> WindowAlignmentDataset
+Extractor      -> canonical skeleton artifact
+Model          -> ModelOutput/capabilities
+Metric         -> raw counts and aggregate record
+Workflow       -> stage orchestration only
+```
+
+No component may reintroduce a universal factory spanning these domains.
+
+## Compatibility
+
+Compatibility is preserved at deliberate public boundaries and through
+versioned checkpoint/data adapters. Removed internal migration paths are not
+kept alive by empty aliases. Legacy artifacts must either pass an explicit
+migration test or fail with an actionable error.
+
+## Completion gates
+
+- no stale imports or documented commands on the official surface;
+- full tests, targeted lint, compile/import, CLI and config checks pass;
+- three real data adapters and one real forced extractor smoke per dataset;
+- protocol/data/config/checkpoint hashes bind every formal result;
+- all source, zero-shot, fine-tune, and direct cells complete for three seeds;
+- per-session and overall FrameAcc tables are generated from raw counts;
+- documentation and the Chinese refactor skill reflect the final behavior.

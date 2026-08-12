@@ -2,14 +2,15 @@
 
 import os
 import sys
-from pathlib import Path
 from typing import Dict, Optional
 
 
 class WHAM3DConfig:
     """WHAM 3D estimator configuration"""
     def __init__(self, config_dict):
-        self.repo_root = config_dict.get('repo_root', '/home/fzliang/origin/WHAM')
+        self.repo_root = str(config_dict.get('repo_root', '') or '')
+        if not self.repo_root:
+            raise ValueError("WHAM3DConfig.repo_root is required")
         self.checkpoint_file = config_dict.get('checkpoint_file', None)
         self.device = config_dict.get('device', 'cuda:0')
         self.run_global = config_dict.get('run_global', True)
@@ -29,9 +30,6 @@ class WHAM3DEstimator:
         if self._initialized:
             return
 
-        import torch
-        import joblib
-        import numpy as np
 
         wham_path = self.config.repo_root
         if wham_path not in sys.path:
@@ -41,8 +39,8 @@ class WHAM3DEstimator:
             from wham_api import WHAM_API
             self._wham_api = WHAM_API()
             self._initialized = True
-        except Exception as e:
-            raise RuntimeError(f"Failed to load WHAM from {wham_path}: {str(e)}")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to load WHAM from {wham_path}: {exc}") from exc
 
     def reset(self):
         """Reset estimator state."""
@@ -72,7 +70,7 @@ class WHAM3DEstimator:
                 visualize=False
             )
 
-            print(f"[WHAM3D] Processing completed!")
+            print("[WHAM3D] Processing completed!")
             print(f"[WHAM3D] Detected {len(results)} persons")
 
             return {
@@ -81,8 +79,8 @@ class WHAM3DEstimator:
                 'slam_results': slam_results
             }
 
-        except Exception as e:
-            raise RuntimeError(f"WHAM processing failed: {str(e)}")
+        except Exception as exc:
+            raise RuntimeError(f"WHAM processing failed: {exc}") from exc
 
     def __call__(self, video_path: str, output_dir: Optional[str] = None) -> Dict:
         """Callable interface."""

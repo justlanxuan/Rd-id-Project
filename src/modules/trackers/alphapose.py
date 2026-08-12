@@ -1,4 +1,4 @@
-"""AlphaPose tracker adapter for Autism-project.
+"""AlphaPose tracker adapter for Re-id-Project.
 
 Wraps AlphaPose's original tracker implementation without modifying the
 AlphaPose source tree.
@@ -11,18 +11,17 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 import numpy as np
 
-from src.core.registry import TRACKERS
-from src.preprocess.structures import Detection, Track
+from src.data import Detection, Track
 from src.modules.trackers.base import BaseTracker
 
 
 @dataclass
 class AlphaPoseTrackerConfig:
-    repo_root: str = "/home/fzliang/origin/AlphaPose"
+    repo_root: str = ""
     expected_commit: Optional[str] = None
     strict_commit: bool = False
     tracker_cfg: Optional[Any] = None
@@ -30,7 +29,6 @@ class AlphaPoseTrackerConfig:
     gpus: Optional[list[int]] = None
 
 
-@TRACKERS.register("alphapose")
 class AlphaPoseTracker(BaseTracker):
     """In-process AlphaPose tracker (for future decoupled usage)."""
 
@@ -56,6 +54,8 @@ class AlphaPoseTracker(BaseTracker):
 
     @staticmethod
     def _resolve_repo_path(repo_root: str) -> Path:
+        if not repo_root:
+            raise ValueError("AlphaPoseTrackerConfig.repo_root is required")
         repo_path = Path(repo_root).expanduser().resolve()
         if not repo_path.exists():
             raise FileNotFoundError(f"AlphaPose repo not found: {repo_path}")

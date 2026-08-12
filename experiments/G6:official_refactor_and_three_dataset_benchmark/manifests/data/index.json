@@ -1,0 +1,41 @@
+{
+  "manifests": [
+    {
+      "dataset": "totalcapture",
+      "file": "totalcapture.json",
+      "fold_id": null,
+      "manifest_hash": "6a9c66617e9e73d04be1b59a58a580cd148401b1f78b9fde40c491f6cdef3913"
+    },
+    {
+      "dataset": "egohumans",
+      "file": "egohumans.json",
+      "fold_id": null,
+      "manifest_hash": "d1a16dbe807f69a0bdae857776d054ee12d9b55ba581b13627a2f10bf1037c1f"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold1_20260211_171423.json",
+      "fold_id": 1,
+      "manifest_hash": "1f8eb1d3e46429ec30d912e273e3b6dff0d0e5ec7a9c279d59b7a06f61a5d060"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold2_20260211_171724.json",
+      "fold_id": 2,
+      "manifest_hash": "fdaaf1afbcfef91bf51a068ee9da72d682189751f64cf70f60e6f6d447a8e7f2"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold3_20260211_172257.json",
+      "fold_id": 3,
+      "manifest_hash": "2daa754fef9aaff2326b37f418cd49ddd6deb16c5c3ddbdf821f38bf2f3a407b"
+    },
+    {
+      "dataset": "custom",
+      "file": "custom_fold4_20260211_172522.json",
+      "fold_id": 4,
+      "manifest_hash": "ce6e52c229363839e092237047456d8c8a108a3231c37e2f858bfc77442d8330"
+    }
+  ],
+  "schema_version": "1.0"
+}

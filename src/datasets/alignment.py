@@ -14,7 +14,7 @@ from src.datasets.transforms import lowpass_filter_fft, single_sensor_to_48d
 
 
 class WindowAlignmentDataset(Dataset):
-    """Window-level IMU/Video alignment dataset from CSV index."""
+    """Base window-level IMU/Video alignment dataset from CSV index."""
 
     def __init__(
         self,

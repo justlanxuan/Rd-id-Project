@@ -1,8 +1,8 @@
-# Autism Project - Environment Configuration
+# Re-id-Project - core training/evaluation environment
 # Usage: conda env create -f environment.yml
-#        conda activate autism_reid
+#        conda activate reid_project
 
-name: test_reid
+name: reid_project
 channels:
   - pytorch
   - conda-forge
@@ -50,3 +50,8 @@ dependencies:
     - einops
     - scikit-learn
     - scikit-image
+    - yacs
+
+    # Development and contract verification
+    - pytest
+    - ruff

@@ -6,12 +6,10 @@ from typing import List
 
 import numpy as np
 
-from src.core.registry import DETECTORS
-from src.preprocess.structures import Detection
+from src.data import Detection
 from src.modules.detectors.base import BaseDetector
 
 
-@DETECTORS.register("yolox")
 class YOLOXDetector(BaseDetector):
     """Placeholder YOLOX detector.
 

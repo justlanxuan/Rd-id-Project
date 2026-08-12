@@ -43,7 +43,7 @@ class HungarianMatcher(BaseMatcher):
         scores = []
         confidences = []
 
-        for r, c in zip(rows, cols):
+        for r, c in zip(rows, cols, strict=True):
             score = float(sim[r, c])
             if score < self.config.threshold:
                 continue

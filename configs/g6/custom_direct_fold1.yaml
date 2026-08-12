@@ -1,0 +1,48 @@
+project: g6_custom_direct_fold1
+
+preprocess:
+  dataset: custom
+  reuse_prepared: true
+  prepared_root: /data/fzliang/reid-project/custom/preprocessed/hybrid_w24_session_out_rawcsv7d_swapsess/fold1_20260211_171423
+
+slice:
+  window_len: 24
+  stride: 16
+  train_sessions: "20260211_172257,20260211_172522"
+  val_sessions: "20260211_171724"
+  test_sessions: "20260211_171423"
+
+train:
+  model:
+    type: hybrid
+  epochs: 50
+  batch_size: 64
+  num_workers: 8
+  compute_imu_stats: true
+  imu_sensor: ""
+  repeat_single_sensor: 1
+  device: cuda
+  seed: 0
+  output:
+    run_name: g6_custom_direct_fold1_seed0
+
+test:
+  batch_size: 64
+  metrics:
+    frame_acc:
+      enabled: true
+      singleton_policy: exclude
+      segment_root: /data/fzliang/reid-project/custom/evaluation/custom_segments/sequences
+      custom_imu_root: /data/fzliang/data/preprocess/2person
+      custom_imu_split_mode: rawcsv
+      custom_imu_raw_swap_sessions: ["20260211_171724", "20260211_172257"]
+      sessions: ["20260211_171423"]
+      window_size: 24
+      stride: 16
+      per_window_features: true
+      cosine_weight: 1.0
+      pair_logit_weight: 0.0
+      seed: 42
+      shuffle_match: true
+    group_test:
+      enabled: false

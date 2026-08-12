@@ -4,12 +4,22 @@ import csv
 
 import numpy as np
 
+from preprocess.adapters import DATASET_ADAPTERS, DatasetAdapter, build_dataset_adapter
+from preprocess.datasets import custom as preprocess_custom
 from src.datasets import WindowAlignmentDataset
-from src.datasets.alignment_dataset import WindowAlignmentDataset as LegacyWindowAlignmentDataset
 
 
-def test_alignment_dataset_import_compatibility():
-    assert WindowAlignmentDataset is LegacyWindowAlignmentDataset
+def test_raw_dataset_adapters_are_configurable_classes(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("preprocess:\n  dataset: custom\n", encoding="utf-8")
+
+    assert DATASET_ADAPTERS.names() == ("custom", "egohumans", "totalcapture")
+    for name in DATASET_ADAPTERS.names():
+        assert isinstance(build_dataset_adapter(name, config_path), DatasetAdapter)
+
+
+def test_preprocess_package_exports_dataset_helpers():
+    assert hasattr(preprocess_custom, "load_custom_split_7d_sequence")
 
 
 def test_window_alignment_dataset_reads_standard_npz(tmp_path):

@@ -24,6 +24,9 @@ Common optional fields:
 - `imu_idx`: IMU person index in multi-person arrays.
 - `source_sequence`: original sequence id used for window grouping.
 - `source_window_start`: original window start used for window grouping.
+- `candidate_group_id`: explicit synchronized or deterministic cross-sequence
+  candidate group used by FrameAcc.
+- `candidate_index`: stable candidate position within that group.
 - `imu_npz_path`: optional IMU source NPZ override, relative to `PATHS.DATA_ROOT`.
 - `imu_window_start`: optional IMU source start override.
 - `imu_window_end`: optional IMU source end override.
@@ -56,9 +59,13 @@ Optional arrays:
 
 - `gt_skeleton_meters`: root trajectory source for global motion features.
 - `gt_bboxes` or `extract_bboxes`: bounding-box trajectory source.
+- `schema_version`, `dataset`, `sequence_id`, `frame_ids`, visibility and
+  person-id/mapping arrays used by canonical validation and segment FrameAcc.
 
 ## IMU Convention
 
 The official hybrid encoder consumes the first 7 IMU channels as
 `acc3 + quat4`. Legacy 48D IMU layouts are still supported through explicit
 compatibility options, but new preprocessing code should emit 7D IMU streams.
+The quaternion order is `w,x,y,z`; sensor location and coordinate frame must be
+declared by the dataset protocol rather than inferred from tensor width.

@@ -10,10 +10,9 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set
 
 import numpy as np
-
 
 EPS = 1e-6
 

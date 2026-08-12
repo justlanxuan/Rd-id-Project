@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
 import torch
 import torch.nn as nn
 
+from src.models.base import ModelCapabilities, ModelOutput
 from src.modules.domain import DomainClassifier
 
 
@@ -29,6 +28,11 @@ class IMUVideoMatcher(nn.Module):
         self.video_encoder = video_encoder
         self.num_domains = num_domains
         self.domain_hidden_dim = domain_hidden_dim
+        self.capabilities = ModelCapabilities(
+            pair_logits=pair_head,
+            cross_pair_logits=cross_pair_head,
+            domain_logits=num_domains > 0,
+        )
         embed_dim = getattr(imu_encoder, "hidden_size", None)
         if embed_dim is None:
             raise ValueError("Cannot infer IMU encoder output dim.")
@@ -63,9 +67,7 @@ class IMUVideoMatcher(nn.Module):
                 nn.Linear(cross_pair_hidden_dim // 2, 1),
             )
 
-    def forward(
-        self, imu: torch.Tensor, skeleton: torch.Tensor
-    ) -> Dict[str, torch.Tensor]:
+    def forward(self, imu: torch.Tensor, skeleton: torch.Tensor) -> ModelOutput:
         z_imu = self.imu_encoder(imu)
         z_vid = self.video_encoder(skeleton)
         out = {"imu": z_imu, "video": z_vid}

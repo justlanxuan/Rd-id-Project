@@ -12,14 +12,14 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 
 @dataclass
 class AlphaPoseFullConfig:
     """Configuration for AlphaPose full subprocess mode."""
 
-    repo_root: str = "/home/fzliang/origin/AlphaPose"
+    repo_root: str = ""
     cfg_file: Optional[str] = None
     checkpoint_file: Optional[str] = None
     python: str = sys.executable
@@ -35,6 +35,8 @@ class AlphaPoseFullEstimator:
 
     def __init__(self, config: Optional[AlphaPoseFullConfig] = None):
         self.config = config or AlphaPoseFullConfig()
+        if not self.config.repo_root:
+            raise ValueError("AlphaPoseFullConfig.repo_root is required")
         self.repo_path = Path(self.config.repo_root).expanduser().resolve()
         if not self.repo_path.exists():
             raise FileNotFoundError(f"AlphaPose repo not found: {self.repo_path}")
@@ -80,10 +82,11 @@ class AlphaPoseFullEstimator:
             cmd.extend(["--posebatch", str(self.config.posebatch)])
 
         _env = dict(env) if env is not None else os.environ.copy()
-        # Remove Autism-project src paths to avoid conflicting with AlphaPose's internal utils package
+        # Remove the current repository path to avoid conflicting with AlphaPose's internal utils package.
+        project_root = Path(__file__).resolve().parents[3]
         filtered_paths = [
             p for p in _env.get("PYTHONPATH", "").split(os.pathsep)
-            if p and "Autism-project" not in p
+            if p and Path(p).expanduser().resolve() != project_root
         ]
         _env["PYTHONPATH"] = str(self.repo_path)
         if filtered_paths:

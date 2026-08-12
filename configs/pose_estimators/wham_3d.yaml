@@ -1,5 +1,5 @@
 # WHAM 3D pose estimator config
-pose_estimator_root: /home/fzliang/origin/WHAM
+pose_estimator_root: ${WHAM_ROOT}
 pose_estimator_ckpt: null
 device: cuda:0
 run_global: true

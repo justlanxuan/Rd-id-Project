@@ -1,66 +1,82 @@
 # Development Guide
 
-This repository keeps production code, reusable data preparation, and research
-experiments separate.
+## Code boundaries
 
-## Code Boundaries
-
-- `src/pipeline.py` is the official workflow entrypoint.
+- `run_pipeline.py` is the only public workflow entrypoint.
+- `src/workflow/` owns stage construction and ordering contracts.
 - `src/config/` owns defaults, legacy YAML normalization, and path resolution.
-- `src/preprocess/` converts raw dataset sources into standardized NPZ/CSV.
-- `src/datasets/` converts standardized NPZ/CSV into PyTorch datasets and
-  dataset-aware samplers.
-- `src/engine/` owns training/evaluation orchestration and engine helpers.
-- `src/modules/` owns model, encoder, matcher, and reusable loss components.
-- `experiments/` is for one-off scripts, reports, and ablations. Production
-  code under `src/` should not import from `experiments/`.
+- `preprocess/` owns raw dataset conversion, extraction dispatch, canonical
+  packing/slicing, adapters, and prepared-cache validation.
+- `src/datasets/` reads canonical NPZ/CSV artifacts; it does not know raw
+  dataset layouts.
+- `src/models/` owns model construction, capabilities, and checkpoints.
+- `src/metrics/` owns metric construction and exact aggregation semantics.
+- `src/engine/` owns training/evaluation loops against those interfaces.
+- `tools/g6/` owns reproducible experiment matrices and execution tooling.
+- `experiments/` contains plans, reports, and one-off research artifacts.
 
-## Compatibility Policy
+Production modules must not import from `experiments/`.
 
-Small refactors should preserve existing public entrypoints. When a module is
-renamed, leave a compatibility shim for at least one development cycle. For
-example, `src.datasets.alignment_dataset` still re-exports
-`WindowAlignmentDataset` after the official implementation moved to
-`src.datasets.alignment`.
+## Compatibility policy
 
-## Adding a Dataset
+The stable external contract is:
 
-1. Add dataset-specific raw conversion under `src/preprocess/datasets/`.
-2. Emit the standardized NPZ schema and window CSVs described in
-   `docs/data_format.md`.
-3. Reuse `WindowAlignmentDataset` unless the standardized schema itself changes.
-4. Add or update a smoke config under `configs/examples/` or an official config
-   under `configs/official/` once those config directories are introduced.
+```bash
+python run_pipeline.py --config CONFIG [--stages preprocess,train,test]
+```
 
-## Adding Training Logic
+`prepare` and `evaluate` are temporary deprecated stage aliases. Deleted
+`src.pipeline`, `src.pipelines`, and `src.preprocess` paths are not public API.
+If a future rename must remain compatible, use a thin, tested shim with an
+explicit removal condition.
 
-- Put metadata conversion in `src/engine/batch.py`.
-- Put input augmentation in `src/engine/augmentation.py`.
-- Put training-only loss composition in `src/engine/losses.py`.
-- Put statistics fitting in `src/engine/stats.py`.
-- Put validation-loop helpers in `src/engine/validation.py`.
-- Keep `src/engine/train.py` focused on config loading, construction, and the
-  main training loop.
+## Adding domains
+
+### Dataset
+
+Implement and register a `DatasetAdapter` under `preprocess/adapters/`. Emit
+the canonical schema and keep using `WindowAlignmentDataset` unless the
+canonical reading semantics genuinely differ.
+
+### Extractor
+
+Implement `VideoSkeletonExtractor`, dependency checks, cache validation, and
+provenance. A production claim requires a real forced short-video test with
+non-empty output.
+
+### Model
+
+Implement the model input/output contract and capabilities, then register its
+builder under `src/models/`. Add a model-owned checkpoint adapter where needed
+and test forward, backward, save/load, and every advertised evaluator.
+
+### Metric
+
+Implement `EvaluationMetric` under `src/metrics/`. Define raw counts,
+exclusions, degenerate cases, and aggregation before registering it.
+
+## Training code
+
+- metadata conversion: `src/engine/batch.py`
+- augmentation: `src/engine/augmentation.py`
+- losses: `src/engine/losses.py`
+- fitted statistics: `src/engine/stats.py`
+- validation loop: `src/engine/validation.py`
+- construction shared by train/test: `src/engine/common.py`
+
+Keep `train.py` and `evaluate.py` focused on orchestration. Model-name branches
+belong in model capabilities/adapters, not the engines.
 
 ## Checks
 
-Use the project Python environment, not the base conda environment. On this
-machine, `mobind_repro` currently has the runtime dependencies needed for import
-smoke checks:
+Use the project environment rather than an unrelated base Python:
 
 ```bash
-/home/fzliang/miniconda3/envs/mobind_repro/bin/python -m compileall -q src
-/home/fzliang/miniconda3/envs/mobind_repro/bin/python - <<'PY'
-from src.config import load_cfg
-from src.datasets import WindowAlignmentDataset
-print(load_cfg("configs/totalcapture_vicon_test.yaml").PREPROCESS.DATASET)
-print(WindowAlignmentDataset)
-PY
+python -m compileall -q run_pipeline.py preprocess src tools/g6
+python -m pytest -q
+python -m ruff check run_pipeline.py preprocess src tools/g6 tests
+git diff --check
 ```
 
-After installing development dependencies, run:
-
-```bash
-python -m pytest
-ruff check src tests
-```
+For data or extractor changes, also run the corresponding real adapter or
+short-video smoke; toy tests alone do not establish real backend compatibility.

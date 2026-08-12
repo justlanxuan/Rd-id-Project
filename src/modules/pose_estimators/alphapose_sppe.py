@@ -6,7 +6,6 @@ subprocess detfile mode for ComposedExtractor.
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -17,8 +16,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
-from src.core.registry import POSE_ESTIMATORS
-from src.preprocess.structures import Pose, Track
+from src.data import Pose, Track
 from src.modules.pose_estimators.base import BasePoseEstimator
 
 
@@ -26,7 +24,7 @@ from src.modules.pose_estimators.base import BasePoseEstimator
 class AlphaPoseSPPEConfig:
     """Configuration for AlphaPose SPPE (pose-only) adapter."""
 
-    repo_root: str = "/home/fzliang/origin/AlphaPose"
+    repo_root: str = ""
     cfg_file: Optional[str] = None
     checkpoint_file: Optional[str] = None
     device: str = "cuda:0"
@@ -44,12 +42,13 @@ class AlphaPoseSPPEConfig:
     use_expandable_segments: bool = False
 
 
-@POSE_ESTIMATORS.register("alphapose_sppe")
 class AlphaPoseSPPE(BasePoseEstimator):
     """Run AlphaPose keypoint inference on externally provided bounding boxes."""
 
     def __init__(self, config: Optional[AlphaPoseSPPEConfig] = None):
         self.config = config or AlphaPoseSPPEConfig()
+        if not self.config.repo_root:
+            raise ValueError("AlphaPoseSPPEConfig.repo_root is required")
         self.repo_path = Path(self.config.repo_root).expanduser().resolve()
         if not self.repo_path.exists():
             raise FileNotFoundError(f"AlphaPose repo not found: {self.repo_path}")
@@ -118,7 +117,6 @@ class AlphaPoseSPPE(BasePoseEstimator):
             raise ValueError("AlphaPoseSPPEConfig.checkpoint_file is required")
 
         import torch
-
         from alphapose.models import builder
         from alphapose.utils.config import update_config
         from alphapose.utils.presets import SimpleTransform, SimpleTransform3DSMPL
@@ -149,8 +147,6 @@ class AlphaPoseSPPE(BasePoseEstimator):
         self._heatmap_to_coord = get_func_heatmap_to_coord(self._cfg)
 
     def _build_transformation(self, SimpleTransform, SimpleTransform3DSMPL):
-        import torch
-
         input_size = self._cfg.DATA_PRESET.IMAGE_SIZE
         output_size = self._cfg.DATA_PRESET.HEATMAP_SIZE
         sigma = self._cfg.DATA_PRESET.SIGMA
@@ -229,14 +225,6 @@ class AlphaPoseSPPE(BasePoseEstimator):
 
         poses: List[Pose] = []
         for r in raw_results:
-            kpts = np.stack(
-                [
-                    np.array(r["keypoints_xy"], dtype=np.float32),
-                    np.array(r["keypoints_score"], dtype=np.float32),
-                ],
-                axis=-1,
-            )  # not right: keypoints_xy is [K,2], keypoints_score is [K]
-            # Let's fix:
             xy = np.asarray(r["keypoints_xy"], dtype=np.float32)  # [K, 2]
             scores = np.asarray(r["keypoints_score"], dtype=np.float32)  # [K]
             keypoints = np.concatenate([xy, scores[:, None]], axis=-1)  # [K, 3]
