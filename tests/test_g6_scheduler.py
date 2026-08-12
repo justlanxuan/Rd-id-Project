@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import torch
@@ -8,10 +9,27 @@ import torch
 from src.config import load_cfg
 from tools.g6.configs import generate_resolved_configs
 from tools.g6.scheduler import (
+    _terminate_running_jobs,
     build_execution_plan,
     load_job_index,
     summarize_execution_plan,
 )
+
+
+def test_scheduler_cleanup_terminates_process_group_and_closes_log(tmp_path):
+    log_path = tmp_path / "child.log"
+    handle = log_path.open("w", encoding="utf-8")
+    process = subprocess.Popen(
+        ["bash", "-c", "sleep 60 & wait"],
+        stdout=handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
+    _terminate_running_jobs({"job": (process, handle, "0", log_path)})
+
+    assert process.poll() is not None
+    assert handle.closed
 
 
 def _generated_index(tmp_path: Path):

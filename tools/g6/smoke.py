@@ -12,6 +12,7 @@ from src.config import load_cfg
 
 SMOKE_TRAIN_JOBS = (
     "train.source.totalcapture.seed0",
+    "train.source.egohumans.seed0",
     "train.direct.none.fold1.seed0",
 )
 

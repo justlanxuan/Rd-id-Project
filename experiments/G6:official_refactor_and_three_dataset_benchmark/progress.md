@@ -136,3 +136,25 @@
   `pip check` 无冲突。
 - 修复后全量验证：`79 passed`，Ruff、compileall、`git diff --check` 与中文 skill
   校验通过。下一步创建新 snapshot 并重新绑定 protocol/config 后重跑短 smoke。
+
+### 首次正式调度失败与数值稳定性修复
+
+- 基于 snapshot `619b46802d7e37a580fe5642db2a54c149adf69d` 启动 5 卡正式 DAG；
+  EgoHumans seed-0/42 均从 epoch 1 起出现 NaN。调度器和全部 5 个子任务被立即停止，
+  未启动后续 evaluate/finetune；旧日志与半写 `last.pt` 原样保留为失败证据。
+- 逐 step 诊断定位到 EgoHumans seed-0 第 8 step：joint dropout 使关键手臂骨段退化，
+  `upper_len / fore_len` 达到约 `2.97e7`；forward/loss 仍有限，但 backward 梯度范数
+  已为 NaN。此前两个 smoke 未覆盖 EgoHumans，因此漏掉这条数据分布路径。
+- 骨段长度特征改为有界对称 log-ratio；同一正式 augmentation 路径复现 40 step
+  全部有限，第 8 step vector 峰值降至 `39.86`，40 step 峰值 `74.95`。
+- 训练循环现在对 loss、梯度范数、参数和 validation metrics fail-fast，在写 checkpoint
+  前拒绝任何非有限结果；不再继续保存 NaN epoch。
+- smoke 生成器升级为 TotalCapture、EgoHumans、Custom 三数据源各一条；三条公共 CLI
+  10-step smoke 均退出码 0，完整 train/test artifact 写入独立诊断目录：
+  - TotalCapture：`334/879`，FrameAcc `0.379977`；
+  - EgoHumans：`635/1101`，FrameAcc `0.576748`；
+  - Custom fold-1：`1635/3624`，加权 FrameAcc `0.451159`。
+- scheduler 现在为每个任务建立独立进程组；异常或 Ctrl-C 会终止整个子进程组、关闭
+  日志，并把 state 从 `running` 改为明确的 interrupted failure。
+- 修复后全量验证：`82 passed`，Ruff、compileall、`git diff --check` 和中文 skill
+  校验通过。上述 smoke 仅用于数值链路验证，不进入正式统计。

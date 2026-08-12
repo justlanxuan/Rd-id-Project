@@ -39,7 +39,12 @@ def test_smoke_configs_are_bounded_and_cannot_emit_formal_records(tmp_path):
         max_steps_per_epoch=3,
     )
 
-    assert len(rows) == 2
+    assert len(rows) == 3
+    assert {row["source_job_id"] for row in rows} == {
+        "train.source.totalcapture.seed0",
+        "train.source.egohumans.seed0",
+        "train.direct.none.fold1.seed0",
+    }
     for row in rows:
         cfg = load_cfg(smoke_dir / row["config"])
         assert cfg.TRAIN.EPOCHS == 1

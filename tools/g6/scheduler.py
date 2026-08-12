@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -268,6 +269,25 @@ def _write_state(
     _atomic_write_json(path, payload)
 
 
+def _terminate_running_jobs(
+    running: dict[str, tuple[subprocess.Popen, object, str, Path]],
+) -> None:
+    for process, _handle, _gpu, _log_path in running.values():
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5.0
+    for process, _handle, _gpu, _log_path in running.values():
+        if process.poll() is None:
+            try:
+                process.wait(timeout=max(0.0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+    for _process, handle, _gpu, _log_path in running.values():
+        if not handle.closed:
+            handle.close()
+
+
 def run_jobs(
     jobs: list[dict[str, Any]],
     *,
@@ -302,70 +322,81 @@ def run_jobs(
     running: dict[str, tuple[subprocess.Popen, object, str, Path]] = {}
     runtime_terminal: dict[str, JobArtifactStatus] = {}
     failed = False
-    while True:
-        statuses = build_execution_plan(jobs)
-        statuses.update(runtime_terminal)
-        _apply_dependency_states(jobs, statuses)
+    try:
+        while True:
+            statuses = build_execution_plan(jobs)
+            statuses.update(runtime_terminal)
+            _apply_dependency_states(jobs, statuses)
+            for job_id in running:
+                statuses[job_id] = JobArtifactStatus("running")
+            free_gpus = [gpu for gpu in gpus[:parallel] if gpu not in {row[2] for row in running.values()}]
+            ready = [job_id for job_id, status in statuses.items() if status.status == "ready"]
+            while not failed and ready and free_gpus:
+                job_id = ready.pop(0)
+                job = by_id[job_id]
+                gpu = free_gpus.pop(0)
+                config_path = Path(str(job["_config_path"]))
+                cmd = [
+                    sys.executable,
+                    str(Path(__file__).resolve().parents[2] / "run_pipeline.py"),
+                    "--config",
+                    str(config_path),
+                    "--stages",
+                    str(job["stages"]),
+                ]
+                log_path = logs / f"{job_id.replace('.', '__')}.log"
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                handle = log_path.open("w", encoding="utf-8")
+                handle.write("[RUN] " + " ".join(cmd) + f"\n[CUDA_VISIBLE_DEVICES] {gpu}\n")
+                handle.flush()
+                env = os.environ.copy()
+                env["CUDA_VISIBLE_DEVICES"] = gpu
+                process = subprocess.Popen(
+                    cmd,
+                    cwd=str(Path(__file__).resolve().parents[2]),
+                    env=env,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                running[job_id] = (process, handle, gpu, log_path)
+                statuses[job_id] = JobArtifactStatus("running")
+
+            _write_state(state, statuses, running)
+            if not running:
+                remaining = [value.status for value in statuses.values() if value.status != "completed"]
+                if not remaining:
+                    return statuses
+                if failed or not any(value == "ready" for value in remaining):
+                    raise RuntimeError(f"G6 execution stopped with summary {summarize_execution_plan(statuses)}")
+
+            time.sleep(max(float(poll_seconds), 0.1))
+            for job_id, (process, handle, _gpu, log_path) in list(running.items()):
+                return_code = process.poll()
+                if return_code is None:
+                    continue
+                handle.close()
+                running.pop(job_id)
+                if return_code != 0:
+                    runtime_terminal[job_id] = JobArtifactStatus(
+                        "failed", f"exit code {return_code}; log={log_path}"
+                    )
+                    failed = True
+                    continue
+                verified = artifact_status(by_id[job_id])
+                if verified.status != "completed":
+                    runtime_terminal[job_id] = JobArtifactStatus(
+                        "failed", f"process exited 0 but artifact verification returned {verified}"
+                    )
+                    failed = True
+                else:
+                    runtime_terminal.pop(job_id, None)
+    except BaseException as exc:
         for job_id in running:
-            statuses[job_id] = JobArtifactStatus("running")
-        free_gpus = [gpu for gpu in gpus[:parallel] if gpu not in {row[2] for row in running.values()}]
-        ready = [job_id for job_id, status in statuses.items() if status.status == "ready"]
-        while not failed and ready and free_gpus:
-            job_id = ready.pop(0)
-            job = by_id[job_id]
-            gpu = free_gpus.pop(0)
-            config_path = Path(str(job["_config_path"]))
-            cmd = [
-                sys.executable,
-                str(Path(__file__).resolve().parents[2] / "run_pipeline.py"),
-                "--config",
-                str(config_path),
-                "--stages",
-                str(job["stages"]),
-            ]
-            log_path = logs / f"{job_id.replace('.', '__')}.log"
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            handle = log_path.open("w", encoding="utf-8")
-            handle.write("[RUN] " + " ".join(cmd) + f"\n[CUDA_VISIBLE_DEVICES] {gpu}\n")
-            handle.flush()
-            env = os.environ.copy()
-            env["CUDA_VISIBLE_DEVICES"] = gpu
-            process = subprocess.Popen(
-                cmd,
-                cwd=str(Path(__file__).resolve().parents[2]),
-                env=env,
-                stdout=handle,
-                stderr=subprocess.STDOUT,
+            statuses[job_id] = JobArtifactStatus(
+                "failed",
+                f"Scheduler interrupted by {type(exc).__name__}; child process terminated.",
             )
-            running[job_id] = (process, handle, gpu, log_path)
-            statuses[job_id] = JobArtifactStatus("running")
-
-        _write_state(state, statuses, running)
-        if not running:
-            remaining = [value.status for value in statuses.values() if value.status != "completed"]
-            if not remaining:
-                return statuses
-            if failed or not any(value == "ready" for value in remaining):
-                raise RuntimeError(f"G6 execution stopped with summary {summarize_execution_plan(statuses)}")
-
-        time.sleep(max(float(poll_seconds), 0.1))
-        for job_id, (process, handle, _gpu, log_path) in list(running.items()):
-            return_code = process.poll()
-            if return_code is None:
-                continue
-            handle.close()
-            running.pop(job_id)
-            if return_code != 0:
-                runtime_terminal[job_id] = JobArtifactStatus(
-                    "failed", f"exit code {return_code}; log={log_path}"
-                )
-                failed = True
-                continue
-            verified = artifact_status(by_id[job_id])
-            if verified.status != "completed":
-                runtime_terminal[job_id] = JobArtifactStatus(
-                    "failed", f"process exited 0 but artifact verification returned {verified}"
-                )
-                failed = True
-            else:
-                runtime_terminal.pop(job_id, None)
+        _terminate_running_jobs(running)
+        _write_state(state, statuses, {})
+        raise

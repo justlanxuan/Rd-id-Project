@@ -148,7 +148,13 @@ def skeleton_tokens(
     tokens[:, :, 2, 1] = cross
     tokens[:, :, 2, 2] = torch.cos(rel_rot)
     tokens[:, :, 2, 3] = torch.sin(rel_rot)
-    tokens[:, :, 2, 4] = upper_len / fore_len.clamp_min(1e-6)
+    # Joint dropout and missing detections can collapse one bone while leaving
+    # the other nonzero.  The raw ratio then reaches millions and may keep the
+    # forward pass finite while producing NaN gradients in attention backward.
+    # A log-ratio is symmetric, informative, and bounded for degenerate bones.
+    tokens[:, :, 2, 4] = torch.log(
+        (upper_len.clamp_min(1e-4) / fore_len.clamp_min(1e-4)).clamp(1e-3, 1e3)
+    )
     tokens[:, :, 2, 5:7] = closure
     tokens[:, :, 2, 7] = _norm(closure)
     tokens[:, :, 2, 8:10] = wrist_rel

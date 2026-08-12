@@ -58,6 +58,21 @@ def resolve_save_dir(cfg) -> Path:
     return (output_root / run_name).resolve()
 
 
+def require_finite_tensor(value: torch.Tensor, *, name: str, epoch: int, step: int) -> None:
+    if not torch.isfinite(value).all():
+        raise FloatingPointError(
+            f"Non-finite {name} at epoch={epoch}, step={step}; refusing optimizer/checkpoint write."
+        )
+
+
+def require_finite_metrics(metrics: dict[str, float], *, epoch: int) -> None:
+    invalid = {key: value for key, value in metrics.items() if not np.isfinite(float(value))}
+    if invalid:
+        raise FloatingPointError(
+            f"Non-finite validation metrics at epoch={epoch}: {invalid}; refusing checkpoint write."
+        )
+
+
 def main() -> None:
     cli_args = parse_args()
     cfg = load_cfg(cli_args.config)
@@ -373,14 +388,33 @@ def main() -> None:
                 + float(getattr(T, "PAIR_ANTI_TIE_WEIGHT", 0.0)) * anti_tie_loss
             )
 
+            require_finite_tensor(loss, name="training loss", epoch=epoch, step=step)
+
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             if T.MAX_GRAD_NORM > 0:
-                torch.nn.utils.clip_grad_norm_(
+                grad_norm = torch.nn.utils.clip_grad_norm_(
                     [p for p in list(model.parameters()) + loss_params + id_params if p.requires_grad],
                     T.MAX_GRAD_NORM,
                 )
+                require_finite_tensor(grad_norm, name="gradient norm", epoch=epoch, step=step)
+            else:
+                for param_name, param in model.named_parameters():
+                    if param.grad is not None:
+                        require_finite_tensor(
+                            param.grad,
+                            name=f"gradient {param_name}",
+                            epoch=epoch,
+                            step=step,
+                        )
             optimizer.step()
+            for param_name, param in model.named_parameters():
+                require_finite_tensor(
+                    param,
+                    name=f"parameter {param_name}",
+                    epoch=epoch,
+                    step=step,
+                )
 
             if contrastive_target == "subject" and subject_labels_for_main is not None:
                 acc = subject_retrieval_top1(out["imu"], video_for_loss, subject_labels_for_main)
@@ -429,6 +463,7 @@ def main() -> None:
             pair_loss_target=pair_loss_target,
             pair_anti_tie_weight=float(getattr(T, "PAIR_ANTI_TIE_WEIGHT", 0.0)),
         )
+        require_finite_metrics(val_metrics, epoch=epoch)
         train_loss = running_loss / max(steps, 1)
         train_main_loss = running_main_loss / max(steps, 1)
         train_domain_loss = running_domain_loss / max(steps, 1)
