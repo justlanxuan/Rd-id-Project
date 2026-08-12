@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--protocol-record", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--markdown-output", default="")
+    parser.add_argument("--title", default="G6 三数据集 Re-ID 正式结果")
     return parser.parse_args()
 
 
@@ -41,7 +42,9 @@ def main() -> None:
     if args.markdown_output:
         markdown_output = Path(args.markdown_output).expanduser().resolve()
         markdown_output.parent.mkdir(parents=True, exist_ok=True)
-        markdown_output.write_text(render_results_markdown(result), encoding="utf-8")
+        markdown_output.write_text(
+            render_results_markdown(result, title=args.title), encoding="utf-8"
+        )
         print(markdown_output)
 
 

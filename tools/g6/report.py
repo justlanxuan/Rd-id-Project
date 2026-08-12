@@ -13,9 +13,11 @@ def _mean_std(summary: dict[str, Any]) -> str:
     return f"{_metric(summary['mean'])} ± {_metric(summary['sample_std'])}"
 
 
-def render_results_markdown(result: dict[str, Any]) -> str:
+def render_results_markdown(
+    result: dict[str, Any], *, title: str = "G6 三数据集 Re-ID 正式结果"
+) -> str:
     lines = [
-        "# G6 三数据集 Re-ID 正式结果",
+        f"# {title}",
         "",
         f"- Protocol hash: `{result['protocol_hash']}`",
         f"- Git commit: `{result['git_commit']}`",
