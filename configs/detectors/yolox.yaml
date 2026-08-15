@@ -1,2 +1,0 @@
-# YOLOX detector stub (currently embedded inside ByteTrack full pipeline)
-bytetrack_root: ${BYTETRACK_ROOT}

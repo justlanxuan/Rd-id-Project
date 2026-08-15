@@ -251,8 +251,6 @@ def _dataset_dir_name(dataset: str) -> str:
         return "totalcapture"
     if name.startswith("egohumans"):
         return "egohumans"
-    if name.startswith("custom_plus"):
-        return "custom_plus"
     if name.startswith("custom"):
         return "custom"
     return name or "dataset"
@@ -446,7 +444,3 @@ def load_config(config_path: Union[str, Path], extra_variables: Dict[str, str] |
         if section not in present_sections and section in data:
             data.pop(section)
     return data
-
-
-def resolve_config(config_path: Union[str, Path]) -> Dict[str, Any]:
-    return load_config(config_path)

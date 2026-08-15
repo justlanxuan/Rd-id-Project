@@ -8,12 +8,10 @@ materialization.
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable
 
 import cv2
-import numpy as np
 
 
 def get_video_resolution(video_path: Path) -> tuple[int, int]:
@@ -24,15 +22,6 @@ def get_video_resolution(video_path: Path) -> tuple[int, int]:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
     return width, height
-
-
-def get_video_fps(video_path: Path) -> float:
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        return 30.0
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    cap.release()
-    return float(fps) if fps > 0 else 30.0
 
 
 def find_video_for_sequence(raw_root: Path, subject: str, session: str, camera: str, ext: str = ".mp4") -> Path | None:
@@ -68,53 +57,3 @@ def write_video_manifest(manifest_csv: Path, video_paths: Iterable[str]) -> None
         writer = csv.DictWriter(f, fieldnames=["video_path"])
         writer.writeheader()
         writer.writerows(rows)
-
-
-def save_skeleton_json(entries: Sequence[dict], out_json: Path) -> None:
-    out_json.parent.mkdir(parents=True, exist_ok=True)
-    out_json.write_text(json.dumps(list(entries)))
-
-
-def pose2d_to_bbox(pose2d: np.ndarray, margin: float = 0.05) -> np.ndarray:
-    t_len = pose2d.shape[0]
-    bboxes = np.zeros((t_len, 4), dtype=np.float32)
-    for t in range(t_len):
-        pts = pose2d[t]
-        mask = np.logical_and(pts[:, 0] > 0, pts[:, 1] > 0)
-        if mask.sum() == 0:
-            continue
-        xs = pts[mask, 0]
-        ys = pts[mask, 1]
-        x1, y1 = xs.min(), ys.min()
-        x2, y2 = xs.max(), ys.max()
-        w, h = x2 - x1, y2 - y1
-        bboxes[t] = np.array([x1 - w * margin, y1 - h * margin, x2 + w * margin, y2 + h * margin], dtype=np.float32)
-    return bboxes
-
-
-def resolve_synthetic_root(root: Path, side: str | None) -> Path:
-    """Resolve a synthetic IMU root directory for a given side token.
-
-    This helper tries a few casing variants (lower, upper, capitalized)
-    and falls back to the provided root if no variant exists.
-    """
-    if not side:
-        return root
-    token = str(side).strip().lower()
-    candidates = [root / token, root / token.upper(), root / token.capitalize()]
-    for cand in candidates:
-        if cand.exists():
-            return cand
-    return root
-
-
-def collect_synthetic_npzs(root: Path, side: str | None) -> list[Path]:
-    """Collect synthetic NPZ files under a root, optionally filtering by side token."""
-    resolved = resolve_synthetic_root(root, side)
-    direct = sorted(resolved.glob("*.npz"))
-    if direct:
-        return direct
-    if side:
-        token = str(side).strip().lower()
-        return sorted(p for p in resolved.rglob("*.npz") if token in p.name.lower())
-    return sorted(resolved.rglob("*.npz"))

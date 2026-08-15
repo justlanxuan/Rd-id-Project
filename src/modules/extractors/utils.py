@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
-
-from src.data import Pose
 
 
 def convert_bytetrack_txt_to_detfile(track_txt: Path, frame_dir: Path, out_json: Path) -> None:
@@ -46,28 +43,6 @@ def convert_bytetrack_txt_to_detfile(track_txt: Path, frame_dir: Path, out_json:
     out_json.parent.mkdir(parents=True, exist_ok=True)
     with out_json.open("w") as f:
         json.dump(dets, f)
-
-
-def poses_to_alphapose_json(poses: List[List[Pose]], output_path: Path) -> None:
-    results = []
-    for frame_id, frame_poses in enumerate(poses):
-        for p in frame_poses:
-            kpts = p.keypoints
-            flat_keypoints = []
-            for i in range(kpts.shape[0]):
-                flat_keypoints.extend([float(kpts[i, 0]), float(kpts[i, 1]), float(kpts[i, 2])])
-            results.append(
-                {
-                    "image_id": f"{frame_id}.jpg",
-                    "category_id": 1,
-                    "keypoints": flat_keypoints,
-                    "score": float(p.score) if p.score is not None else 0.0,
-                    "idx": p.track_id if p.track_id is not None else 0,
-                }
-            )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w") as f:
-        json.dump(results, f, indent=2)
 
 
 def extract_video_frames(video_path: Path, frame_dir: Path) -> None:

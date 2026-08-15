@@ -8,7 +8,7 @@ from typing import Any
 
 from preprocess.adapters import build_dataset_adapter
 from preprocess.common.slice import run_slice_from_npz
-from src.utils.config import resolve_config
+from src.config import load_config
 
 from .base import PipelineStage
 from .runtime import run_command
@@ -19,7 +19,7 @@ class PreprocessStage(PipelineStage):
 
     def run(self, state: dict[str, Any] | None = None) -> dict[str, Any]:
         next_state = {} if state is None else dict(state)
-        cfg = resolve_config(self.config_path)
+        cfg = load_config(self.config_path)
         preprocess_cfg = cfg.get("preprocess", {})
         if not isinstance(preprocess_cfg, dict):
             raise TypeError("PREPROCESS must be a mapping.")

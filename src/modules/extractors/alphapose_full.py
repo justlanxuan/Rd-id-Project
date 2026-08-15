@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from typing import Any, Dict
 
-from src.modules.estimators import AlphaPoseFullConfig, AlphaPoseFullEstimator
 from src.modules.extractors.base import ExtractorCapabilities, VideoSkeletonExtractor
+from src.modules.pose_estimators.alphapose_full import AlphaPoseFullConfig, AlphaPoseFullEstimator
 
 
 class AlphaPoseFullExtractor(VideoSkeletonExtractor):

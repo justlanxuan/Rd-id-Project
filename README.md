@@ -40,12 +40,7 @@ Run stages independently or in an explicit order:
 ./run_pipeline.py --config CONFIG.yaml --stages preprocess,train,test
 ```
 
-`prepare` remains a deprecated alias for `preprocess`; `evaluate` remains a
-deprecated alias for `test`. New scripts and documentation must use the
-canonical names.
-
-`run.sh CONFIG [STAGES]` is a small shell convenience wrapper around the same
-Python entrypoint.
+Only the canonical stage names `preprocess`, `train`, and `test` are accepted.
 
 ## Configuration contract
 
@@ -148,9 +143,9 @@ evaluation do not branch on raw dataset layout.
 All extractors implement dependency checks and return a canonical extraction
 artifact. Supported registry names are:
 
-- `alphapose_full` (`alphapose` alias): production backend validated by real
+- `alphapose_full`: production backend validated by real
   forced short-video smoke tests;
-- `bytetrack_alphapose` (`bytetrack` alias): tracking plus AlphaPose, requiring
+- `bytetrack_alphapose`: tracking plus AlphaPose, requiring
   the complete external repository and weights;
 - `wham`: experimental and rejected from production paths unless explicitly
   enabled.

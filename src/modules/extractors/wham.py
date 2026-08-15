@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from src.modules.estimators import build_wham_3d_estimator
 from src.modules.extractors.base import ExtractorCapabilities, VideoSkeletonExtractor
+from src.modules.pose_estimators.wham_3d import build_wham_3d_estimator
 
 
 class WHAMExtractor(VideoSkeletonExtractor):

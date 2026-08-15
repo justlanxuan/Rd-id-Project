@@ -9,18 +9,6 @@ from typing import Any
 import numpy as np
 
 
-def scalar_string(data: dict, key: str, default: str = "") -> str:
-    if key not in data:
-        return default
-    value = data[key]
-    try:
-        if getattr(value, "shape", None) == ():
-            return str(value.item())
-    except Exception:
-        pass
-    return str(value)
-
-
 def write_sequence_npz(path: Path, payload: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **payload)

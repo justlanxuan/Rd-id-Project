@@ -12,7 +12,7 @@ def test_component_fragments_are_parsed_separately_from_workflow_yaml(monkeypatc
     monkeypatch.setenv("ALPHAPOSE_CKPT", "/opt/weights/alphapose.pth")
     config = assemble_extract_config(
         {
-            "detector": "yolox",
+            "detector": "bytetrack",
             "tracker": "bytetrack",
             "pose_estimator": "alphapose",
             "gpu": 3,
@@ -28,4 +28,4 @@ def test_component_fragment_missing_machine_variable_fails_loud(monkeypatch):
     monkeypatch.delenv("BYTETRACK_ROOT", raising=False)
 
     with pytest.raises(ValueError, match="BYTETRACK_ROOT"):
-        assemble_extract_config({"detector": "yolox"})
+        assemble_extract_config({"tracker": "bytetrack"})

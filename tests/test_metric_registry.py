@@ -7,8 +7,8 @@ from src.metrics import METRIC_REGISTRY, FrameAccEvaluator, GroupTestEvaluator, 
 
 def test_metric_registry_exposes_independent_metric_types():
     assert METRIC_REGISTRY.names() == ("frame_acc", "group_test")
-    assert isinstance(build_metric("frameacc"), FrameAccEvaluator)
-    assert isinstance(build_metric("group", group_sizes=[2]), GroupTestEvaluator)
+    assert isinstance(build_metric("frame_acc"), FrameAccEvaluator)
+    assert isinstance(build_metric("group_test", group_sizes=[2]), GroupTestEvaluator)
 
 
 def test_metric_registry_rejects_unknown_metric():

@@ -66,11 +66,6 @@ def _normalize_pixels(xy: torch.Tensor, image_height: float, image_width: float)
     return xy / scale
 
 
-def _signed_angle_delta(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    delta = b - a
-    return torch.atan2(torch.sin(delta), torch.cos(delta))
-
-
 def _unwrap_time(x: torch.Tensor) -> torch.Tensor:
     """Match numpy.unwrap along the temporal axis."""
     if x.shape[1] <= 1:

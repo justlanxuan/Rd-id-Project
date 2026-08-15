@@ -1,80 +1,23 @@
 """Local EgoHumans preprocess entrypoint.
 
-This implements the same high-level flow as the Autism-project experiment:
-1. convert EgoHumans pose2d files into AlphaPose-style skeleton.json when needed,
-2. create sequence-level NPZ files that later slice stages can consume,
-3. optionally write a video manifest for downstream extraction.
+Creates canonical sequence-level NPZ files from the prepared EgoHumans cache
+and optionally writes a video manifest for downstream extraction.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from preprocess.common.config import resolve_config
+from preprocess.common.config import load_config
 from preprocess.common.sequence import write_sequence_meta, write_sequence_npz
 from preprocess.common.video import write_video_manifest
 
 __all__ = ["main", "run_preprocess"]
-
-
-def _collect_pose2d_dirs(raw_root: Path) -> list[Path]:
-    if not raw_root.exists():
-        return []
-    dirs: list[Path] = []
-    for action_dir in sorted(raw_root.iterdir()):
-        if not action_dir.is_dir():
-            continue
-        for seq_dir in sorted(action_dir.iterdir()):
-            if not seq_dir.is_dir():
-                continue
-            pose_dir = seq_dir / "processed_data" / "poses2d" / "cam03" / "rgb"
-            if pose_dir.exists():
-                dirs.append(pose_dir)
-    return dirs
-
-
-def _convert_pose2d_to_skeleton_json(pose2d_dir: Path, out_json: Path) -> None:
-    npy_files = sorted(pose2d_dir.glob("*.npy"))
-    if not npy_files:
-        return
-    entries = []
-    name_to_tid: dict[str, int] = {}
-    next_tid = 0
-    for npy_file in npy_files:
-        frame_idx = int(npy_file.stem) - 1
-        if frame_idx < 0:
-            continue
-        data = np.load(npy_file, allow_pickle=True)
-        for det in data:
-            name = det.get("human_name", "")
-            if name not in name_to_tid:
-                name_to_tid[name] = next_tid
-                next_tid += 1
-            track_id = name_to_tid[name]
-            bbox = det["bbox"]
-            x1, y1, x2, y2 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-            w, h = x2 - x1, y2 - y1
-            kpts = det["keypoints"][:17].astype(float)
-            flat = []
-            for j in range(17):
-                flat.extend([float(kpts[j, 0]), float(kpts[j, 1]), float(kpts[j, 2])])
-            score = float(bbox[4]) if len(bbox) > 4 else float(np.mean(kpts[:, 2]))
-            entries.append({
-                "image_id": f"{frame_idx:05d}.jpg",
-                "category_id": 1,
-                "keypoints": flat,
-                "score": score,
-                "box": [x1, y1, w, h],
-                "idx": track_id,
-            })
-    out_json.parent.mkdir(parents=True, exist_ok=True)
-    out_json.write_text(json.dumps(entries), encoding="utf-8")
 
 
 def _session_from_cache_path(path: Path) -> str:
@@ -106,7 +49,7 @@ def _pose_bboxes(pose2d: np.ndarray, visibility: np.ndarray) -> np.ndarray:
 
 
 def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None = None, manifest_csv: str | Path | None = None) -> Path:
-    cfg = resolve_config(config_path)
+    cfg = load_config(config_path)
     preprocess_cfg = cfg.get("preprocess", {}) if isinstance(cfg.get("preprocess"), dict) else {}
     raw_root = Path(preprocess_cfg.get("raw_root", "/data/lyxie/ReID/Data/egohumans/data")).expanduser().resolve()
     extracted_root = Path(

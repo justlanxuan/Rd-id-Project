@@ -1,25 +1,18 @@
-artifacts/
-experiments/alignment/
-data/processed/
-src/data/processed/
-data/interim/
-src/data/interim/
-src/data/output/
+/artifacts/
+/data/processed/
+/data/interim/
+/experiments/
+/visual/
+
 **/__pycache__/
-*.pyc
-visual/
-experiments/
-experiments/synthetic_imu_matching/*.json
-experiments/synthetic_imu_matching/__pycache__
-experiments/synthetic_imu_matching/*.npz
-
-.log/
-.runbook/
-__pycache__/
 *.py[cod]
+/.log/
+/.runbook/
+/.pytest_cache/
+/.ruff_cache/
 
-# Local pre-refactor smoke outputs and archived one-off E28 configs are kept
-# on the workstation, but are not part of the reproducible G6 code snapshot.
+# Regenerable local smoke outputs and archived one-off E28 configs are not part
+# of the reproducible experiment snapshots.
 /tmp_*_out/
 /configs/_tmp_e28_*.yaml
 /configs/e28_augsrc_*.yaml

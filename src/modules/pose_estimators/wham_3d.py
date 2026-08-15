@@ -42,10 +42,6 @@ class WHAM3DEstimator:
         except Exception as exc:
             raise RuntimeError(f"Failed to load WHAM from {wham_path}: {exc}") from exc
 
-    def reset(self):
-        """Reset estimator state."""
-        pass
-
     def process_video(self, video_path: str, output_dir: Optional[str] = None) -> Dict:
         """Process video file and obtain 3D human results."""
         self._load_wham()

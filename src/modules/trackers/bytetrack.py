@@ -1,7 +1,4 @@
-"""ByteTrack adapter for Re-id-Project.
-
-Supports both decoupled tracking (BaseTracker) and full subprocess mode.
-"""
+"""ByteTrack subprocess adapter used by the composed video extractor."""
 
 from __future__ import annotations
 
@@ -9,13 +6,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Dict, List, Optional
-
-import numpy as np
-
-from src.data import Detection, Track
-from src.modules.trackers.base import BaseTracker
+from typing import Dict, Optional
 
 
 @dataclass
@@ -25,7 +16,6 @@ class ByteTrackConfig:
     repo_root: Optional[str] = None
     expected_commit: Optional[str] = None
     strict_commit: bool = False
-    frame_rate: int = 30
     track_thresh: float = 0.5
     track_buffer: int = 30
     match_thresh: float = 0.8
@@ -44,35 +34,11 @@ class ByteTrackConfig:
     python: str = sys.executable
 
 
-class ByteTrackTracker(BaseTracker):
-    """Adapter around `yolox.tracker.byte_tracker.BYTETracker`.
-
-    Provides both:
-      - `update()`: in-process frame-by-frame tracking (BaseTracker interface)
-      - `run_on_video()`: subprocess-based full video tracking
-    """
+class ByteTrackTracker:
+    """Run ByteTrack's supported full-video command-line workflow."""
 
     def __init__(self, config: Optional[ByteTrackConfig] = None):
         self.config = config or ByteTrackConfig()
-        self._tracker = None
-
-    def _lazy_init(self) -> None:
-        if self._tracker is not None:
-            return
-        repo_path = self._resolve_repo_path(self.config.repo_root)
-        import cv2  # noqa: F401
-        if repo_path is not None:
-            self._validate_commit(repo_path)
-            self._ensure_import_path(repo_path)
-        from yolox.tracker.byte_tracker import BYTETracker
-
-        args = SimpleNamespace(
-            track_thresh=float(self.config.track_thresh),
-            track_buffer=int(self.config.track_buffer),
-            match_thresh=float(self.config.match_thresh),
-            mot20=bool(self.config.mot20),
-        )
-        self._tracker = BYTETracker(args, frame_rate=int(self.config.frame_rate))
 
     @staticmethod
     def _resolve_repo_path(repo_root: Optional[str]) -> Optional[Path]:
@@ -107,43 +73,6 @@ class ByteTrackTracker(BaseTracker):
                 raise RuntimeError(message)
             print(f"[ByteTrackTracker] Warning: {message}")
 
-    @staticmethod
-    def _ensure_import_path(repo_path: Path) -> None:
-        repo_root = str(repo_path)
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-
-    def reset(self) -> None:
-        """Reset tracker state and start a new sequence."""
-        self._tracker = None
-
-    def update(self, detections: List[Detection], frame: np.ndarray) -> List[Track]:
-        """Run one tracking update step and return normalized tracking results."""
-        self._lazy_init()
-        if self._tracker is None:
-            raise RuntimeError("ByteTrack runtime is not initialized")
-
-        det = self._detections_to_array(detections)
-        height, width = frame.shape[:2]
-        online_tracks = self._tracker.update(det, (height, width), (height, width))
-
-        results: List[Track] = []
-        for t in online_tracks:
-            tlbr = t.tlbr.tolist() if hasattr(t.tlbr, "tolist") else list(t.tlbr)
-            detection = Detection(bbox=np.array(tlbr, dtype=np.float32), score=float(getattr(t, "score", 0.0)))
-            results.append(Track(track_id=int(t.track_id), detection=detection))
-        return results
-
-    @staticmethod
-    def _detections_to_array(detections: List[Detection]) -> np.ndarray:
-        if not detections:
-            return np.zeros((0, 5), dtype=np.float32)
-        arr = []
-        for d in detections:
-            x1, y1, x2, y2 = d.bbox.tolist()
-            arr.append([x1, y1, x2, y2, d.score])
-        return np.array(arr, dtype=np.float32)
-
     def run_on_video(self, video_path: str, output_dir: str, env: Optional[Dict[str, str]] = None) -> Path:
         """Run ByteTrack CLI on a video and return the latest track txt path.
 
@@ -152,6 +81,7 @@ class ByteTrackTracker(BaseTracker):
         repo_path = self._resolve_repo_path(self.config.repo_root)
         if repo_path is None:
             raise FileNotFoundError("ByteTrack repo_root is required for subprocess mode")
+        self._validate_commit(repo_path)
 
         bt_outdir = Path(output_dir) / "bytetrack_raw"
         bt_outdir.mkdir(parents=True, exist_ok=True)

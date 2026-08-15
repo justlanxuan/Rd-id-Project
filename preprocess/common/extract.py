@@ -6,14 +6,13 @@ owns the common detector/tracker/pose-estimator dispatch for all datasets.
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict
 
 import numpy as np
 
@@ -111,53 +110,12 @@ def coco_to_h36m17(coco_keypoints: np.ndarray) -> np.ndarray:
     return h36m
 
 
-def load_alphapose_skeleton(skeleton_json: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Load AlphaPose skeleton JSON into H36M joints and scores."""
-    with open(skeleton_json) as f:
-        data = json.load(f)
-
-    def get_frame_num(item: dict[str, Any]) -> int:
-        try:
-            return int(str(item["image_id"]).split(".")[0])
-        except (ValueError, IndexError, KeyError, TypeError):
-            return 0
-
-    data = sorted(data, key=get_frame_num)
-    n_frames = len(data)
-    coco_kpts = np.zeros((n_frames, 17, 3), dtype=np.float32)
-    scores = np.zeros(n_frames, dtype=np.float32)
-
-    for i, frame in enumerate(data):
-        keypoints = frame["keypoints"]
-        for j in range(17):
-            coco_kpts[i, j, 0] = keypoints[j * 3]
-            coco_kpts[i, j, 1] = keypoints[j * 3 + 1]
-            coco_kpts[i, j, 2] = keypoints[j * 3 + 2]
-        scores[i] = frame.get("score", 0.0)
-
-    return coco_to_h36m17(coco_kpts), scores
-
-
 def _frame_num_from_image_id(image_id: str) -> int:
     stem = Path(image_id).stem
     try:
         return int(stem)
     except ValueError:
         return 0
-
-
-def find_skeleton_for_sequence(subject: str, session: str, skeleton_root: Path) -> Path | None:
-    patterns = [f"TC_{subject}_{session}_cam1", f"{subject}_{session}_cam1"]
-
-    for subdir in skeleton_root.iterdir():
-        if not subdir.is_dir():
-            continue
-        if any(pat in subdir.name for pat in patterns):
-            skeleton_file = subdir / "skeleton.json"
-            if skeleton_file.exists():
-                return skeleton_file
-
-    return None
 
 
 def load_alphapose_multiperson(skeleton_json: Path) -> tuple[dict[int, list[dict]], list[int]]:
@@ -207,14 +165,6 @@ def load_alphapose_multiperson(skeleton_json: Path) -> tuple[dict[int, list[dict
             frames.setdefault(frame_idx, []).append(det)
 
     return frames, sorted(track_ids_set)
-
-
-def _assemble_extract_config(extract_cfg: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        from src.modules.extractors import assemble_extract_config as assemble
-    except ImportError as exc:
-        raise RuntimeError(f"Unable to import extractor configuration support: {exc}") from exc
-    return assemble(extract_cfg)
 
 
 def validate_skeleton_artifact(skeleton_json: str | Path) -> Path:
@@ -271,7 +221,9 @@ def run_extraction_if_enabled(
         resolved_output = resolved_video.parent / f"{resolved_video.stem}_extract"
 
     resolved_output.mkdir(parents=True, exist_ok=True)
-    local_cfg = dict(extract_cfg)
+    from src.modules.extractors import assemble_extract_config
+
+    local_cfg = assemble_extract_config(extract_cfg)
     local_cfg["results_root"] = str(resolved_output.parent)
     extractor = build_video_skeleton_extractor(local_cfg)
     skeleton_json = process_video_skeleton(
@@ -282,81 +234,6 @@ def run_extraction_if_enabled(
         result_name=resolved_output.name,
     )
     return Path(skeleton_json)
-
-
-def extract_skeleton(
-    video_path: str | Path,
-    output_dir: str | Path,
-    method: str = "alphapose_full",
-    cfg: Dict[str, Any] | None = None,
-    detfile: str | None = None,
-    env: dict[str, str] | None = None,
-) -> Path | dict:
-    """Compatibility wrapper that extracts skeletons for one video.
-
-    The helper keeps the old single-video API shape while delegating the real
-    work to the shared extractor pipeline.
-    """
-
-    resolved_video = Path(video_path).expanduser().resolve()
-    resolved_output = Path(output_dir).expanduser().resolve()
-    resolved_output.mkdir(parents=True, exist_ok=True)
-
-    extract_cfg: Dict[str, Any] = dict(cfg or {})
-    method_key = str(method or "").strip().lower()
-    if detfile:
-        extract_cfg.setdefault("detfile", str(detfile))
-    if env:
-        extract_cfg.setdefault("env", dict(env))
-    extract_cfg.setdefault("results_root", str(resolved_output))
-
-    if method_key in {"alphapose", "alphapose_full", "full"}:
-        extract_cfg.setdefault("detector", "alphapose")
-        extract_cfg.setdefault("tracker", "alphapose")
-        extract_cfg.setdefault("pose_estimator", "alphapose")
-    elif method_key in {"alphapose_sppe", "sppe", "detfile"}:
-        extract_cfg.setdefault("detector", "bytetrack")
-        extract_cfg.setdefault("tracker", "bytetrack")
-        extract_cfg.setdefault("pose_estimator", "alphapose")
-    elif method_key in {"wham", "wham_3d"}:
-        extract_cfg.setdefault("detector", None)
-        extract_cfg.setdefault("tracker", None)
-        extract_cfg.setdefault("pose_estimator", "wham")
-    else:
-        raise ValueError(f"Unknown skeleton extraction method: {method}")
-
-    extractor = build_video_skeleton_extractor(extract_cfg)
-    return process_video_skeleton(resolved_video, extractor, extract_cfg, dry_run=False, result_name=resolved_video.stem)
-
-
-def iter_manifest_videos(extract_cfg: Dict[str, Any]) -> Iterable[tuple[Path, str | None]]:
-    video = extract_cfg.get("video")
-    manifest_csv = extract_cfg.get("manifest_csv")
-    limit = int(extract_cfg.get("limit", 0))
-
-    if video:
-        yield Path(video).expanduser().resolve(), None
-        return
-
-    if manifest_csv:
-        manifest_path = Path(manifest_csv).expanduser().resolve()
-        if not manifest_path.exists():
-            raise FileNotFoundError(f"Manifest CSV not found: {manifest_path}")
-        with manifest_path.open("r", newline="") as f:
-            reader = csv.DictReader(f)
-            count = 0
-            for row in reader:
-                video_path = row.get("video_path", "").strip()
-                if not video_path:
-                    continue
-                count += 1
-                if limit and count > limit:
-                    break
-                result_name = row.get("result_name") or row.get("sequence_id") or None
-                yield Path(video_path).expanduser().resolve(), result_name
-        return
-
-    raise ValueError("Config extract section must specify 'video' or 'manifest_csv'")
 
 
 def build_video_skeleton_extractor(extract_cfg: Dict[str, Any]) -> Any:
@@ -531,31 +408,3 @@ def process_video_skeleton(
     print(f"\nPipeline finished for {video_name}")
     print(f"Skeleton JSON: {skeleton_json}")
     return skeleton_json
-
-
-def run_video_skeleton_extraction(config_path: str | Path, dry_run: bool = False) -> None:
-    try:
-        from src.utils.config import resolve_config
-    except Exception as exc:  # pragma: no cover - optional dependency path
-        raise RuntimeError(f"Skeleton extraction requires optional config dependencies: {exc}") from exc
-
-    cfg = resolve_config(config_path)
-    extract_cfg = cfg.get("extract")
-    if not isinstance(extract_cfg, dict):
-        print("[INFO] No extract section in config; nothing to do.")
-        return
-
-    extract_cfg = _assemble_extract_config(extract_cfg)
-    videos = list(iter_manifest_videos(extract_cfg))
-    if dry_run:
-        for video_path, result_name in videos:
-            results_root = Path(extract_cfg.get(
-                "results_root",
-                "/data/fzliang/reid-project/extract_outputs",
-            )).expanduser().resolve()
-            print(f"[DRY_RUN] Would extract {video_path} -> {results_root / (result_name or video_path.stem)}")
-        return
-
-    extractor = build_video_skeleton_extractor(extract_cfg)
-    for video_path, result_name in videos:
-        process_video_skeleton(video_path, extractor, extract_cfg, dry_run=False, result_name=result_name)

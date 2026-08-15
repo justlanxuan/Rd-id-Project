@@ -1,11 +1,5 @@
-"""Trackers module."""
+"""Video-tracker adapters used by extractor implementations."""
 
-from src.modules.trackers.alphapose import AlphaPoseTracker
-from src.modules.trackers.base import BaseTracker
-from src.modules.trackers.bytetrack import ByteTrackTracker
+from src.modules.trackers.bytetrack import ByteTrackConfig, ByteTrackTracker
 
-__all__ = [
-    "BaseTracker",
-    "ByteTrackTracker",
-    "AlphaPoseTracker",
-]
+__all__ = ["ByteTrackConfig", "ByteTrackTracker"]

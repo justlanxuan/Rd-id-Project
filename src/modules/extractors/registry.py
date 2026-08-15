@@ -11,14 +11,14 @@ from .base import VideoSkeletonExtractor
 EXTRACTOR_REGISTRY: Registry[VideoSkeletonExtractor] = Registry("extractor")
 
 
-@EXTRACTOR_REGISTRY.register("alphapose_full", aliases=("alphapose",))
+@EXTRACTOR_REGISTRY.register("alphapose_full")
 def _build_alphapose_full(cfg: dict[str, Any]) -> VideoSkeletonExtractor:
     from .alphapose_full import AlphaPoseFullExtractor
 
     return AlphaPoseFullExtractor(cfg)
 
 
-@EXTRACTOR_REGISTRY.register("bytetrack_alphapose", aliases=("bytetrack+alphapose", "bytetrack"))
+@EXTRACTOR_REGISTRY.register("bytetrack_alphapose")
 def _build_bytetrack_alphapose(cfg: dict[str, Any]) -> VideoSkeletonExtractor:
     from .bytetrack_alphapose import ByteTrackAlphaPoseExtractor
 

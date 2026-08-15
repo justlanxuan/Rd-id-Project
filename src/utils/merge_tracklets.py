@@ -32,21 +32,6 @@ class TrackletStats:
 
 
 @dataclass
-class GroupStats:
-    group_id: int
-    members: Set[int]
-    start: int
-    end: int
-    length_sum: int
-    head_center: np.ndarray
-    tail_center: np.ndarray
-    head_size: np.ndarray
-    tail_size: np.ndarray
-    head_vel: np.ndarray
-    tail_vel: np.ndarray
-
-
-@dataclass
 class CandidateEdge:
     src: int
     dst: int
@@ -249,33 +234,6 @@ def compute_tracklet_stats(records, head_window: int, tail_window: int):
         )
 
     return stats, frame_to_ids
-
-
-def compute_group_stats(group_id: int, members: Set[int], stats: Dict[int, TrackletStats]):
-    member_stats = [stats[m] for m in members]
-    start = min(s.start for s in member_stats)
-    end = max(s.end for s in member_stats)
-    length_sum = sum(s.length for s in member_stats)
-    head_center = np.mean([s.head_center for s in member_stats], axis=0)
-    tail_center = np.mean([s.tail_center for s in member_stats], axis=0)
-    head_size = np.mean([s.head_size for s in member_stats], axis=0)
-    tail_size = np.mean([s.tail_size for s in member_stats], axis=0)
-    head_vel = np.mean([s.head_vel for s in member_stats], axis=0)
-    tail_vel = np.mean([s.tail_vel for s in member_stats], axis=0)
-
-    return GroupStats(
-        group_id=group_id,
-        members=set(members),
-        start=int(start),
-        end=int(end),
-        length_sum=int(length_sum),
-        head_center=head_center,
-        tail_center=tail_center,
-        head_size=head_size,
-        tail_size=tail_size,
-        head_vel=head_vel,
-        tail_vel=tail_vel,
-    )
 
 
 def compute_candidate_edges(

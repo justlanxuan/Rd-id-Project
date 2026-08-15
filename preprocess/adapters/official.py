@@ -55,9 +55,9 @@ class CustomAdapter(DatasetAdapter):
     dataset_name = "custom"
 
     def preprocess(self, *, output_dir=None, manifest_csv=None) -> PreprocessArtifact:
-        from preprocess.common.config import resolve_config
+        from preprocess.common.config import load_config
 
-        config = resolve_config(self.config_path)
+        config = load_config(self.config_path)
         preprocess_config = config.get("preprocess", {})
         prepared_root = str(preprocess_config.get("prepared_root", "") or "").strip()
         if bool(preprocess_config.get("reuse_prepared", False)):
@@ -96,9 +96,9 @@ def _reuse_prepared(
     split_identity: str,
     expected_test_key: str,
 ) -> PreprocessArtifact | None:
-    from preprocess.common.config import resolve_config
+    from preprocess.common.config import load_config
 
-    config = resolve_config(adapter.config_path)
+    config = load_config(adapter.config_path)
     preprocess_config = config.get("preprocess", {})
     if not bool(preprocess_config.get("reuse_prepared", False)):
         return None

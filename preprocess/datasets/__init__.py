@@ -1,6 +1,6 @@
 """Dataset-specific preprocess entrypoints exposed from the repository root."""
 
-__all__ = ["custom", "custom_plus", "egohumans", "totalcapture"]
+__all__ = ["custom", "egohumans", "totalcapture"]
 
 
 def __getattr__(name: str):

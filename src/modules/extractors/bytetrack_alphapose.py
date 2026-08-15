@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from src.modules.estimators import AlphaPoseSPPE, AlphaPoseSPPEConfig
 from src.modules.extractors.base import ExtractorCapabilities, VideoSkeletonExtractor
 from src.modules.extractors.utils import convert_bytetrack_txt_to_detfile, extract_video_frames
+from src.modules.pose_estimators.alphapose_sppe import AlphaPoseSPPE, AlphaPoseSPPEConfig
 from src.modules.trackers.bytetrack import ByteTrackConfig, ByteTrackTracker
 
 

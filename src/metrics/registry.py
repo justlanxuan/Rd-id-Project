@@ -10,8 +10,8 @@ from .base import EvaluationMetric
 from .window import FrameAccEvaluator, GroupTestEvaluator
 
 METRIC_REGISTRY: Registry[EvaluationMetric] = Registry("metric")
-METRIC_REGISTRY.register("frame_acc", aliases=("frameacc",))(FrameAccEvaluator)
-METRIC_REGISTRY.register("group_test", aliases=("group",))(GroupTestEvaluator)
+METRIC_REGISTRY.register("frame_acc")(FrameAccEvaluator)
+METRIC_REGISTRY.register("group_test")(GroupTestEvaluator)
 
 
 def build_metric(name: str, **kwargs: Any) -> EvaluationMetric:

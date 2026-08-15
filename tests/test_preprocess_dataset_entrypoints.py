@@ -4,7 +4,7 @@ from preprocess.adapters import build_dataset_adapter
 from preprocess.common.config import load_section_config, parse_bool
 from preprocess.common.extract import coco_to_h36m17, run_extraction_if_enabled
 from preprocess.datasets import custom, egohumans, totalcapture
-from src.modules.estimators import AlphaPoseFullEstimator, AlphaPoseSPPE, WHAM3DEstimator
+from src.modules.pose_estimators import AlphaPoseFullEstimator, AlphaPoseSPPE, WHAM3DEstimator
 
 
 def test_dataset_entrypoints_expose_runtime_helpers():
@@ -43,7 +43,7 @@ def test_common_alpha_pose_conversion_shape():
     assert h36m.shape == (2, 17, 3)
 
 
-def test_unified_estimators_package_exports_core_backends():
+def test_pose_estimators_package_exports_core_backends():
     assert AlphaPoseFullEstimator is not None
     assert AlphaPoseSPPE is not None
     assert WHAM3DEstimator is not None

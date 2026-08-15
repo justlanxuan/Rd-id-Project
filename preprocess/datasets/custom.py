@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from preprocess.common.config import resolve_config
+from preprocess.common.config import load_config
 from preprocess.common.extract import resolve_extract_config, run_extraction_if_enabled
 from preprocess.common.imu import (
     convert_single_imu_to_7d,
@@ -168,13 +168,6 @@ def _parse_bool(value: Any, default: bool = True) -> bool:
     return default
 
 
-def _resolve_sequence_files(raw_root: Path, sequence_id: str) -> list[Path]:
-    if not raw_root.exists():
-        return []
-    pattern = f"*{sequence_id}*"
-    return sorted([p for p in raw_root.rglob("*.csv") if sequence_id in p.name or pattern in p.name])
-
-
 def _infer_imu_files(raw_root: Path) -> list[Path]:
     if not raw_root.exists():
         return []
@@ -182,7 +175,7 @@ def _infer_imu_files(raw_root: Path) -> list[Path]:
 
 
 def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None = None, manifest_csv: str | Path | None = None) -> Path:
-    cfg = resolve_config(config_path)
+    cfg = load_config(config_path)
     preprocess_cfg = cfg.get("preprocess", {}) if isinstance(cfg.get("preprocess"), dict) else {}
 
     raw_root = Path(preprocess_cfg.get("raw_root", "/data/fzliang/custom")).expanduser().resolve()

@@ -12,7 +12,7 @@ from src.modules.matchers import IMUVideoMatcher
 MODEL_REGISTRY: Registry[IMUVideoMatcher] = Registry("model")
 
 
-@MODEL_REGISTRY.register("hybrid", aliases=("default", "legacy"))
+@MODEL_REGISTRY.register("hybrid")
 def _build_hybrid(cfg: Any, device: torch.device) -> IMUVideoMatcher:
     from .hybrid import build_hybrid_model
 

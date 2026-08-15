@@ -47,7 +47,7 @@ def _raw_state(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return state
 
 
-@MODEL_CHECKPOINT_ADAPTERS.register("hybrid", aliases=("default", "legacy"))
+@MODEL_CHECKPOINT_ADAPTERS.register("hybrid")
 def adapt_hybrid_checkpoint(payload: Mapping[str, Any]) -> dict[str, torch.Tensor]:
     """Migrate historical Hybrid keys and fold legacy encoder stats into state."""
     adapted: dict[str, torch.Tensor] = {}

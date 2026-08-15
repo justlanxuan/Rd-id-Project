@@ -13,7 +13,7 @@
 - `src/metrics/` owns metric construction and exact aggregation semantics.
 - `src/engine/` owns training/evaluation loops against those interfaces.
 - `tools/g6/` owns reproducible experiment matrices and execution tooling.
-- `experiments/` contains plans, reports, and one-off research artifacts.
+- `experiments/` contains the tracked G6/G7 protocol, manifests, and reports.
 
 Production modules must not import from `experiments/`.
 
@@ -25,10 +25,9 @@ The stable external contract is:
 python run_pipeline.py --config CONFIG [--stages preprocess,train,test]
 ```
 
-`prepare` and `evaluate` are temporary deprecated stage aliases. Deleted
-`src.pipeline`, `src.pipelines`, and `src.preprocess` paths are not public API.
-If a future rename must remain compatible, use a thin, tested shim with an
-explicit removal condition.
+Only `preprocess`, `train`, and `test` are accepted stage names. Deleted legacy
+paths and aliases are not public API. If a future rename must remain
+compatible, use a thin, tested shim with an explicit removal condition.
 
 ## Adding domains
 

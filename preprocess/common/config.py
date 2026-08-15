@@ -29,10 +29,6 @@ def load_section_config(config_path: str | Path | None, section: str | None = No
     return value
 
 
-def resolve_config(config_path: str | Path | None) -> Dict[str, Any]:
-    return load_config(config_path)
-
-
 def parse_bool(value: Any, default: bool = True) -> bool:
     if value is None:
         return default

@@ -6,10 +6,8 @@ from typing import Any, Tuple
 
 import torch
 
-from src.config import get_cfg_defaults
 from src.models.checkpoint import load_model_checkpoint
 from src.models.registry import build_model
-from src.modules.encoders import HybridSkeletonEncoder
 from src.modules.matchers import IMUVideoMatcher, SymmetricInfoNCE
 
 
@@ -39,32 +37,6 @@ def build_alignment_model_from_cfg(
     if model_cfg.INIT_ALIGNMENT_CKPT:
         _load_init_checkpoint(model, model_name, str(model_cfg.INIT_ALIGNMENT_CKPT))
     return model, model_name
-
-
-def build_alignment_model(
-    args: Any,
-    device: torch.device,
-    embed_dim: int = 128,
-) -> Tuple[IMUVideoMatcher, str]:
-    """Compatibility wrapper for legacy scripts; still builds only hybrid."""
-    cfg = get_cfg_defaults()
-    cfg.defrost()
-    cfg.TRAIN.MODEL.TYPE = "hybrid"
-    cfg.TRAIN.MODEL.HYBRID_HIDDEN = int(getattr(args, "hybrid_hidden", embed_dim))
-    cfg.TRAIN.MODEL.NUM_DOMAINS = int(getattr(args, "num_domains", 0))
-    cfg.TRAIN.MODEL.DOMAIN_HIDDEN_DIM = int(getattr(args, "domain_hidden_dim", 256))
-    init_ckpt = str(getattr(args, "init_alignment_ckpt", "") or "")
-    if init_ckpt:
-        cfg.TRAIN.MODEL.INIT_ALIGNMENT_CKPT = init_ckpt
-    cfg.freeze()
-    return build_alignment_model_from_cfg(cfg, device)
-
-
-def _get_backbone_from_video_encoder(video_encoder):
-    """Hybrid encoders do not expose a separately frozen backbone."""
-    if isinstance(video_encoder, HybridSkeletonEncoder):
-        return None
-    raise AttributeError(f"Unsupported video encoder: {type(video_encoder).__name__}")
 
 
 def build_optimizer(

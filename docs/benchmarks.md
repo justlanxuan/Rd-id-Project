@@ -46,7 +46,3 @@ python -m tools.g6.aggregate_results --help
 The runner accepts only a locked protocol record. Completion is based on
 validated checkpoint/run-record contents and hashes, not path existence. A
 partial or corrupt artifact stops the run for human inspection.
-
-`configs/benchmarks/cross_dataset_transfer_sota.yaml` and the former
-`tools/run_benchmark.py` workflow describe an older experimental protocol and
-must not be mixed with G6 results.

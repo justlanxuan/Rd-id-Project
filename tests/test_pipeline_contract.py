@@ -34,14 +34,7 @@ def test_public_stage_parser_defaults_and_composition():
     assert pipeline.parse_stages("preprocess,train,test") == ["preprocess", "train", "test"]
 
 
-def test_legacy_stage_aliases_are_explicitly_deprecated():
-    with pytest.warns(DeprecationWarning, match="prepare"):
-        assert pipeline.parse_stages("prepare") == ["preprocess"]
-    with pytest.warns(DeprecationWarning, match="evaluate"):
-        assert pipeline.parse_stages("evaluate") == ["test"]
-
-
-@pytest.mark.parametrize("spec", ["", ",", "extract", "preprocess,prepare"])
+@pytest.mark.parametrize("spec", ["", ",", "extract", "prepare", "evaluate", "preprocess,preprocess"])
 def test_invalid_or_duplicate_public_stages_fail(spec):
     with pytest.raises(ValueError):
         pipeline.parse_stages(spec)

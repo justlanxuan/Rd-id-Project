@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from preprocess.common.config import resolve_config
+from preprocess.common.config import load_config
 from preprocess.common.extract import resolve_extract_config, run_extraction_if_enabled
 from preprocess.common.sequence import write_sequence_meta, write_sequence_npz
 from preprocess.common.slice import (
@@ -25,7 +25,7 @@ __all__ = ["run_preprocess", "main"]
 
 
 def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None = None, manifest_csv: str | Path | None = None) -> Path:
-    cfg = resolve_config(config_path)
+    cfg = load_config(config_path)
     preprocess_cfg = cfg.get("preprocess", {}) if isinstance(cfg.get("preprocess"), dict) else {}
     raw_root = Path(preprocess_cfg.get("raw_root", "/data/fzliang/totalcapture")).expanduser().resolve()
     resolved_output_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else Path(preprocess_cfg.get("output", str(raw_root / "preprocessed"))).expanduser().resolve()

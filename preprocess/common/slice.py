@@ -9,7 +9,6 @@ from typing import Any
 
 import numpy as np
 
-from .config import load_config
 from .extract import load_alphapose_multiperson
 
 SENSOR_ORDER = ["L_LowLeg", "R_LowLeg", "L_LowArm", "R_LowArm"]
@@ -27,35 +26,6 @@ EGOHUMANS_MOBIND_E21_SOURCE_SPLIT = {
     "val_sessions": ["01_002", "03_004", "04_001"],
     "test_sessions": ["01_001", "03_001", "03_002", "03_003"],
 }
-
-
-def load_slice_cfg(config_path: str | None) -> dict:
-    if not config_path:
-        return {}
-    data = load_config(config_path)
-    slice_cfg = data.get("slice", {})
-    if slice_cfg is None:
-        return {}
-    if not isinstance(slice_cfg, dict):
-        raise ValueError(f"Invalid slice section in config: {config_path}")
-    return slice_cfg
-
-
-def resolve_output_paths(
-    output_dir: str | None,
-    manifest_csv: str | None,
-    default_manifest: str,
-) -> tuple[Path, Path]:
-    default_manifest_path = Path(default_manifest).expanduser().resolve()
-    if output_dir:
-        resolved_output_dir = Path(output_dir).expanduser().resolve()
-    else:
-        resolved_output_dir = default_manifest_path.parent
-    if manifest_csv:
-        resolved_manifest_csv = Path(manifest_csv).expanduser().resolve()
-    else:
-        resolved_manifest_csv = default_manifest_path
-    return resolved_output_dir, resolved_manifest_csv
 
 
 def parse_subjects(spec: Any) -> list[str]:
@@ -408,9 +378,6 @@ def run_slice_from_npz(
             parts = sequence_id.split("_")
             subject = parts[1]
             session = "_".join(parts[2:-1])
-        elif sequence_id.startswith("custom_plus_"):
-            session = sequence_id[len("custom_plus_"):]
-            subject = "all"
         elif sequence_id.startswith("custom_"):
             session = sequence_id[len("custom_"):]
             subject = "all"

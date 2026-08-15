@@ -170,19 +170,6 @@ def _resolve_imu_stats(cfg, checkpoint: Path) -> str:
     return str(sibling) if sibling.exists() else ""
 
 
-def load_skeleton_json(path: Path, tlen: int) -> np.ndarray:
-    entries = json.loads(path.read_text())
-    track_ids = sorted({int(e["idx"]) for e in entries})
-    tid_to_idx = {tid: i for i, tid in enumerate(track_ids)}
-    pose2d = np.zeros((tlen, len(track_ids), 17, 2), dtype=np.float32)
-    for e in entries:
-        frame = int(str(e["image_id"]).split(".")[0])
-        if 0 <= frame < tlen:
-            kpts = np.asarray(e["keypoints"], dtype=np.float32).reshape(17, 3)
-            pose2d[frame, tid_to_idx[int(e["idx"])], :, :2] = kpts[:, :2]
-    return pose2d
-
-
 def compute_segment_frameacc_counts(npz_data, frame_assignments: np.ndarray) -> tuple[float, int, int]:
     t_len = int(npz_data["frame_ids"].shape[0])
     n_gt = int(npz_data["gt_person_ids"].shape[0])

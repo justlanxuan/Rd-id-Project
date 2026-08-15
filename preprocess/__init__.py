@@ -2,7 +2,7 @@
 
 from .adapters import DATASET_ADAPTERS, DatasetAdapter, build_dataset_adapter
 
-_DATASET_MODULES = ("custom", "custom_plus", "egohumans", "totalcapture")
+_DATASET_MODULES = ("custom", "egohumans", "totalcapture")
 __all__ = ["DATASET_ADAPTERS", "DatasetAdapter", "build_dataset_adapter", *_DATASET_MODULES]
 
 

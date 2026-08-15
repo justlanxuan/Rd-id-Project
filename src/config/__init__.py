@@ -1,6 +1,6 @@
 """YACS-backed workflow configuration."""
 
-from .config import cfg_to_dict, load_cfg, load_config, resolve_config
+from .config import cfg_to_dict, load_cfg, load_config
 from .defaults import get_cfg_defaults
 
 __all__ = [
@@ -8,5 +8,4 @@ __all__ = [
     "get_cfg_defaults",
     "load_cfg",
     "load_config",
-    "resolve_config",
 ]
