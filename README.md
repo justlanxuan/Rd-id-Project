@@ -262,6 +262,24 @@ The frozen matrix contains:
 Seeds are `0`, `42`, and `123`. Custom results are retained per held-out
 session and aggregated as both macro-session and micro/weighted FrameAcc.
 
+For diagnostics on the original, unmerged Custom tracker output, use a
+full-session evaluation config:
+
+```bash
+./run_pipeline.py \
+  --config configs/evaluation/custom_full_session_egohumans_pretrained.yaml \
+  --stages test
+```
+
+This mode treats every raw tracker `idx` as an opaque tracklet. Composite IDs
+such as `[1,2]` are not expanded, history is stored independently per ID, a
+new ID starts with empty history, and state is reset between complete
+sessions. It does not create or evaluate Custom segment files. The result JSON
+retains both instantaneous Hungarian predictions and causal historical-vote
+predictions. History matching is inference-only: it is configured under
+`test.metrics.frame_acc` and never participates in training loss, gradients,
+or checkpoint creation.
+
 G6 tooling is intentionally separated from the public pipeline:
 
 ```bash

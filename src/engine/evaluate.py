@@ -30,6 +30,7 @@ from preprocess.datasets.custom import (
 )
 from src.config import load_cfg
 from src.datasets import WindowAlignmentDataset
+from src.engine.similarity import encode_hybrid_precomputed, model_similarity_matrix
 from src.experiments import write_evaluation_run_record
 from src.metrics import EmbeddingBundle, build_metric
 from src.models.checkpoint import load_model_checkpoint
@@ -52,20 +53,6 @@ def read_csv_rows(path: str | Path) -> List[Dict[str, str]]:
         reader = csv.DictReader(f)
         rows.extend(reader)
     return rows
-
-
-def model_similarity_matrix(
-    model,
-    imu_emb: torch.Tensor,
-    video_emb: torch.Tensor,
-    cosine_weight: float = 0.0,
-    pair_logit_weight: float = 1.0,
-) -> np.ndarray:
-    cosine = imu_emb @ video_emb.t()
-    if getattr(model, "pair_head", None) is None:
-        return cosine.detach().cpu().numpy()
-    pair_logits = model.pair_logits(imu_emb, video_emb)
-    return (float(cosine_weight) * cosine + float(pair_logit_weight) * pair_logits).detach().cpu().numpy()
 
 
 def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> EmbeddingBundle:
@@ -378,7 +365,7 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                                 pair_logit_weight=pair_logit_weight,
                             )
                     else:
-                        imu_emb, video_emb = _encode_hybrid_precomputed(
+                        imu_emb, video_emb = encode_hybrid_precomputed(
                             model,
                             raw_full[active, start:end].to(device),
                             vec_full[active, start:end].to(device),
@@ -455,18 +442,6 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
     }
 
 
-def _encode_hybrid_precomputed(model, raw: torch.Tensor, vec: torch.Tensor, imu: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    video_encoder = model.video_encoder
-    imu_encoder = model.imu_encoder
-    raw = (raw - video_encoder.raw_mu) / video_encoder.raw_sd.clamp_min(1e-6)
-    vec = (vec - video_encoder.vec_mu) / video_encoder.vec_sd.clamp_min(1e-6)
-    imu = (imu - imu_encoder.imu_mu) / imu_encoder.imu_sd.clamp_min(1e-6)
-    video = video_encoder.fuse(torch.cat([video_encoder.raw(raw), video_encoder.vec(vec)], dim=1))
-    video = F.normalize(video, dim=1)
-    imu_emb = F.normalize(imu_encoder.raw(imu), dim=1)
-    return imu_emb, video
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unified FrameAcc and Group Test evaluation")
     parser.add_argument("--config", type=str, required=True, help="Workflow YAML.")
@@ -535,19 +510,40 @@ def main() -> None:
 
     frame_cfg = cfg.TEST.METRICS.FRAME_ACC
     group_cfg = cfg.TEST.METRICS.GROUP_TEST
-    use_segment_frameacc = bool(str(frame_cfg.SEGMENT_ROOT).strip())
-    needs_window_bundle = (bool(frame_cfg.ENABLED) and not use_segment_frameacc) or bool(group_cfg.ENABLED)
+    frame_mode = str(frame_cfg.MODE).strip().lower()
+    if frame_mode == "auto":
+        if str(frame_cfg.SESSION_ROOT).strip():
+            frame_mode = "full_session"
+        elif str(frame_cfg.SEGMENT_ROOT).strip():
+            frame_mode = "segment"
+        else:
+            frame_mode = "window"
+    if frame_mode not in {"window", "segment", "full_session"}:
+        raise ValueError(
+            f"Unsupported TEST.METRICS.FRAME_ACC.MODE={frame_cfg.MODE!r}; "
+            "use 'window', 'segment', 'full_session', or 'auto'."
+        )
+    needs_window_bundle = (bool(frame_cfg.ENABLED) and frame_mode == "window") or bool(group_cfg.ENABLED)
     bundle = compute_embeddings(cfg, checkpoint, device) if needs_window_bundle else None
 
     output: Dict[str, object] = {
         "checkpoint": str(checkpoint),
-        "test_csv": str(cfg.PATHS.TEST_CSV),
+        "test_csv": str(cfg.PATHS.TEST_CSV) if bundle is not None else "",
         "num_rows": int(len(bundle.rows)) if bundle is not None else 0,
         "evaluations": {},
     }
     if bool(frame_cfg.ENABLED):
-        if use_segment_frameacc:
+        if frame_mode == "segment":
             output["evaluations"]["frame_acc"] = evaluate_segment_frameacc(cfg, checkpoint, device)
+        elif frame_mode == "full_session":
+            from src.engine.session_frameacc import evaluate_full_session_frameacc
+
+            output["evaluations"]["frame_acc"] = evaluate_full_session_frameacc(
+                cfg,
+                checkpoint,
+                device,
+                resolve_path=_resolve_path,
+            )
         else:
             assert bundle is not None
             output["evaluations"]["frame_acc"] = build_metric(

@@ -1,0 +1,32 @@
+project: g8_full_session_tracklet_history_e28_fold1
+train:
+  model: {type: hybrid}
+  device: cuda
+test:
+  checkpoint: /data/fzliang/reid-project/custom/artifacts/e28_hybrid_augsrc_noonlineaug/train/fold1_20260211_171423_seed42_hybrid_augsrc_noonlineaug_splitclean/best.pt
+  output:
+    output_root: /data/fzliang/reid-project/custom/evaluation/full_session_tracklet_history/e28
+    run_name: fold1_20260211_171423
+  metrics:
+    frame_acc:
+      enabled: true
+      mode: full_session
+      session_root: /data/fzliang/reid-project/custom/preprocessed/custom_hybrid_finetune_from_egohumans/aligned_sequences
+      tracklet_root: /data/fzliang/reid-project/custom/skeleton/alphapose
+      custom_imu_root: /data/fzliang/data/preprocess/2person
+      custom_imu_raw_swap_sessions: ["20260211_171724", "20260211_172257"]
+      sessions: ["20260211_171423"]
+      window_size: 24
+      stride: 16
+      per_window_features: true
+      cosine_weight: 1.0
+      pair_logit_weight: 0.0
+      matcher: tracklet_history
+      assigner: greedy
+      history:
+        decay: 0.0
+        confidence_threshold: 0.7
+        confidence_mode: sigmoid_margin
+        confidence_scale: 3.0
+        low_confidence_action: preserve
+    group_test: {enabled: false}

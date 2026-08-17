@@ -1,7 +1,8 @@
 /artifacts/
 /data/processed/
 /data/interim/
-/experiments/
+/experiments/*
+!/experiments/G8:full_session_tracklet_history/
 /visual/
 
 **/__pycache__/
