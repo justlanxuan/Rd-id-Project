@@ -1,12 +1,13 @@
 # E2/E4/E5 Results：可信子集诊断
 
-状态：`screening_complete`；尚未执行模型干预，因此这些结果用于定位假设，不是性能因果结论。
+状态：`screening_plus_local_controls_complete`；D5/D6/D8 已补充固定检查点、prediction strata 和 Custom detector-ID 对照。结果仍不外推为重训后的全域因果结论。
 
 产物：
 
 - `/data/fzliang/reid-project/g9/e2_multimodal/multimodal_motion_diagnostics.json`
 - `/data/fzliang/reid-project/g9/e2_multimodal/tracking_quality.json`
 - `/data/fzliang/reid-project/g9/e2_multimodal/imu_contract_comparison.json`
+- `/data/fzliang/reid-project/g9/e2_multimodal/custom_detector_id_audit.json`
 
 ## Coverage and representation
 
@@ -52,8 +53,14 @@ The median best lag / absolute correlation is: TotalCapture `+1 / 0.395`, EgoHum
 
 - S06 visibility coverage means: AlphaPose 0.944, FMPose3D/MotionAGFormer/TCPFormer 0.981, WHAM 0.921. These are computed from output visibility, not inferred from finite coordinates.
 - S06 output identity is `inherited_gt_person_order`; independent ID switches cannot be identified because no independent track IDs are stored.
-- Custom has 7380 GT window rows, all `skeleton_source=gt`, with zero person/IMU mapping mismatches; detector tracklet analysis therefore remains pending on raw detector outputs.
+- Custom has 7380 GT window rows, all `skeleton_source=gt`, with zero person/IMU mapping mismatches. D8 audits the raw Custom AlphaPose JSON: four sessions have no duplicate ID/frame rows; raw-ID→GT transition counts are 12 and GT→raw-ID transition counts are 53 under per-frame Hungarian IoU≥0.1. These are transition diagnostics, not relinking-based definitive ID-switch labels. S06 remains unobservable because its NPZ outputs contain inherited person order and no independent IDs.
 
-## Next intervention
+## Fixed-checkpoint controls
 
-Before source/target performance ranking, run representation controls: (1) convert all included IMU streams to one explicit 7D contract; (2) split 2D and 3D skeleton tracks; (3) root/torso normalize; (4) rerun lag and complexity-matched summaries; then use IMU-only/skeleton-only/fusion controls to test whether the observed marginal and cross-modal gaps explain transfer loss.
+- D5 raw versus invalid-quaternion-fill-only versus unit-normalized Custom target IMU: aggregate history FrameAcc 0.54714 → 0.53671 (−160/15349 correct), with the change concentrated in `20260211_172257` (15.26% invalid quaternion frames); instantaneous FrameAcc is unchanged.
+- D6 connects all 528 S06 predictions to pooled motion-energy, visibility-coverage and fragmentation-proxy strata. It reports correct/total per source/variant/bucket and keeps sparse buckets explicit.
+- D8 connects Custom AlphaPose raw detector IDs to GT boxes without altering tracks; S06 ID-switch attribution remains explicitly unavailable.
+
+## Remaining protocol boundary
+
+The current G6 encoder consumes xy only (D7 max feature difference under arbitrary z change is 0). A full-xyz source attribution therefore requires a new xyz-compatible encoder/protocol; it is not silently inferred from the existing xy projection.

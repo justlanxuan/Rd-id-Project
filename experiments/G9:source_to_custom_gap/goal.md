@@ -32,7 +32,7 @@ E1 不是“所有候选源必须同时通过”的全局门禁，而是一个�
 
 ## 4. 当前状态
 
-`diagnostic_complete_causal_controls_pending`：E1 选择性门禁、全量语义/坐标/异常审计、IMU/动作复杂度/时间/tracklet screening，以及 S06 六源×raw/screen 固定检查点控制均已完成。当前只在最小可信子集上解释 gap；full-xyz 表示、filtered/unfiltered IMU fusion 和新增源的 prediction-level 分层仍未声称完成。
+`diagnostic_complete_protocol_boundaries_explicit`：E1 选择性门禁、全量语义/坐标/异常审计、IMU/动作复杂度/时间/tracklet screening，以及 S06 六源×raw/screen 固定检查点控制、Custom IMU quaternion 对照、S06 prediction-level 分层和 Custom detector-ID audit 均已完成。full-xyz 与 S06 独立 ID 被证明是当前 G6 协议之外的边界，不再被静默声称完成。
 
 ## 5. 验收产物
 
@@ -41,4 +41,8 @@ E1 不是“所有候选源必须同时通过”的全局门禁，而是一个�
 - `/data/fzliang/reid-project/g9/e1_gap_audit/semantic_audit.json`
 - `/data/fzliang/reid-project/g9/e1_gap_audit/gap_profile.json`
 - `/data/fzliang/reid-project/g9/e3_source_target/s06_eval/s06_sweep_summary.json`
+- `/data/fzliang/reid-project/g9/e3_source_target/custom_imu_filter_control.json`
+- `/data/fzliang/reid-project/g9/e3_source_target/s06_prediction_stratification.json`
+- `/data/fzliang/reid-project/g9/e3_source_target/g6_representation_boundary.json`
+- `/data/fzliang/reid-project/g9/e2_multimodal/custom_detector_id_audit.json`
 - `/data/fzliang/reid-project/g9/g9_final_gap_manifest.json`

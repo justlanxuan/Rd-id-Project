@@ -54,7 +54,7 @@ G9 不新增一套训练 Dataset。复用 G6 canonical schema、WindowAlignmentD
 
 完成门：输出 `imu_distribution.json`、`cross_modal_alignment.json` 和逐 session 表。
 
-当前实现将这三类证据合并保存在 `/data/fzliang/reid-project/g9/e2_multimodal/multimodal_motion_diagnostics.json`，并明确 2D/3D representation、7D/legacy48 IMU layout 和采样/重采样 provenance；模型干预前仍需做统一 IMU contract 和归一化对照。
+当前实现将这三类证据合并保存在 `/data/fzliang/reid-project/g9/e2_multimodal/multimodal_motion_diagnostics.json`，并明确 2D/3D representation、7D/legacy48 IMU layout 和采样/重采样 provenance；D5 已在四个 held-out Custom session 上完成 embedded 7D quaternion invalid-fill-only 与 unit-normalized 的固定检查点对照。
 
 ### E3：骨架 representation/source sweep
 
@@ -100,7 +100,7 @@ Custom 3D source（仅在真实 smoke 后追加）
 
 完成门：报告复杂度分布和每档 `correct/total`，不只报告整体平均。
 
-当前 screening 先输出每 source 的 low/mid/high motion-energy tertile 与运动特征；`correct/total` 需要接入正式预测矩阵后再计算。
+当前 screening 输出每 source 的 low/mid/high motion-energy tertile 与运动特征；D6 已将 S06 528 个逐序列预测接入 pooled complexity、visibility 和 fragmentation-proxy 的 `correct/total` 分层。
 
 ### E5：时间、跟踪与身份关联分析
 
@@ -116,7 +116,7 @@ Custom 3D source（仅在真实 smoke 后追加）
 
 完成门：输出 lag、tracklet、candidate-group 与逐 session 结果；所有历史状态在 session 边界 reset。
 
-当前 `/data/fzliang/reid-project/g9/e2_multimodal/tracking_quality.json` 已输出 S06 coverage、candidate group、tracklet fragmentation 和 baseline visibility delta；由于输出没有独立 track IDs，ID switch 明确标记为不可识别。
+当前 `/data/fzliang/reid-project/g9/e2_multimodal/tracking_quality.json` 已输出 S06 coverage、candidate group、tracklet fragmentation 和 baseline visibility delta；D6 已把 visibility/fragmentation proxy 接到预测分层，但由于输出没有独立 track IDs，ID switch 仍明确标记为不可识别。
 
 ### E6：适配干预
 

@@ -11,9 +11,11 @@
 - B1 明确记录 7D `acc3+quat(wxyz)`、legacy 48D rotation-matrix+acceleration 以及 Custom raw CSV 的 10 Hz→约 30 fps 重采样证据。
 - C1 将 legacy48 通过已存在的 `legacy_imu48_sensor_to_7d(L_LowArm)` 转为同一 7D contract，并单独记录 quaternion norm invalid tail；转换不覆盖原始数据。
 - B2 对 S06 visibility coverage、candidate group size、tracklet run length、fragmentation 和 baseline visibility delta 分层；独立 ID switch 仅在存在独立 track IDs 时才声称可测。
+- D8 对 Custom AlphaPose 原始 `idx` 做逐帧 IoU association 和 ID-transition audit；S06 无独立 ID 时保留不可识别限制。
 
 ## Interpretation guardrails
 
 1. 2D xy、2D xy+visibility 和 3D xyz 分轨，不能把最后一维长度 3 直接当作 3D。
 2. motion magnitude 只在单记录内按骨长归一化；不同原始坐标空间不做直接 pooled 数值排名。
 3. lag correlation 是筛选证据，不是因果结论；正式模型干预前必须保留 session/frame provenance。
+4. D5/D6/D8 的 fixed-checkpoint 控制只支持局部归因；full-xyz 需要新 encoder/protocol。
