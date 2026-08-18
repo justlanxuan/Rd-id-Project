@@ -34,4 +34,14 @@
 
 ## 运行方式
 
-E1 脚本完成后，命令和输出路径必须追加到本文件，并在 `results/results.md` 保存审计摘要。E1 只做只读审计，不启动训练。
+当前审计命令：
+
+```bash
+/home/fzliang/miniconda3/envs/reid_project/bin/python \\
+  experiments/G9:source_to_custom_gap/E1:gap-audit/scripts/A1_build_source_inventory.py \\
+  --sample-limit 4 --full-hash --max-npz-inspect-mb 64
+```
+
+输出：`/data/fzliang/reid-project/g9/e1_gap_audit/source_inventory.json`。
+
+本命令只读取已有 artifact；大型 NPZ 超过阈值时只记录文件信息，不解压到内存。E1 最终通过前，还必须追加全量/多序列 fingerprint、逐关节 outlier 和 source/Custom coverage 检查。E1 只做只读审计，不启动训练。
