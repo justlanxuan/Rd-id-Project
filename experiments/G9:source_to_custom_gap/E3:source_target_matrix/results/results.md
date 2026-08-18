@@ -17,3 +17,7 @@
 4. 带 raw prediction 的 complexity/tracklet `correct/total` 分层。
 
 这些缺失项是 G9 完成前的必要工作，而不是被当前 G6 canonical 结果隐含替代。
+
+## Existing prediction strata
+
+`D2_stratify_predictions.py` 已对现有 G6 105 个 session clips 重算 history/instantaneous 两种 assignment 的 `correct/total`，按每个 Custom session 的 low/mid/high target motion tertile、candidate group size 和 visible people 分层；没有缺失 segment。该结果只覆盖现有 canonical G6 runs，S06 skeleton-source sweep 仍待执行。

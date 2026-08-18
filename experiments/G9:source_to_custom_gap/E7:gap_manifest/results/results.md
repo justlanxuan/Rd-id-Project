@@ -9,5 +9,6 @@
 - YOLO 有限极值、Custom invalid quaternion、重复产物检查；
 - IMU schema/unit path、lag、运动复杂度、visibility/tracklet 结果；
 - 现有 G6 `correct/total` 与尚未运行的 S06 source-sweep 控制条件。
+- 现有 G6 105 个 session clips 的 prediction-level complexity/candidate-group/visible-people 分层；该分层不替代尚未运行的 S06 source-sweep。
 
 必须继续完成的控制实验已经写在 `next_required_controls`，包括 representation-separated source sweep、统一 7D IMU 的 filtered/unfiltered fusion、complexity/tracklet prediction 分层以及 raw detector track-ID 审计。

@@ -21,6 +21,7 @@ G9 Plan：Source-to-Custom 骨架与跨模态域差异分解；E1 选择性门�
 - C1 已将 S06 legacy48 转换到显式 7D contract；同时发现 Custom 有 1612/177120（0.91%）invalid quaternion frames（28 个 zero-norm），因此 Custom skeleton-target 可纳入，但 IMU/fusion 需报告过滤分母。
 - A4 已定位 YOLO-Pose high 的 996 个 `abs>10` 坐标（54/88 序列），包括 `custom_01_003` frame 184/person 0/joint 10/y=-30.47；EgoHumans raw xy 约 94.9% 坐标值绝对值大于 10，进一步确认必须分 representation/coordinate track。
 - E3 D1 已索引 G6 canonical source→Custom 的 66 个 evaluation records；E7 汇总为 `/data/fzliang/reid-project/g9/g9_final_gap_manifest.json`，明确观测证据与尚待干预控制，不提前声称因果归因。
+- D2 已生成 `/data/fzliang/reid-project/g9/e3_source_target/prediction_stratification.json`，覆盖 105 个 G6 session clips 的 complexity/candidate/visibility strata；S06 新源仍需固定 IMU/target 后运行。
 
 ## Blockers / Issues
 

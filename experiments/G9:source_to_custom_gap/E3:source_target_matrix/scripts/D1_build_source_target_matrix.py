@@ -134,7 +134,7 @@ def main() -> int:
             "S06 skeleton-source sweep with fixed IMU and Custom target",
             "2D versus 3D representation-controlled transfer",
             "7D IMU contract and invalid-quaternion filtered fusion control",
-            "prediction-level complexity/tracklet correct-total stratification",
+            "prediction-level complexity/tracklet correct-total stratification for the new S06 sources",
         ],
         "limitations": [
             "Existing G6 cells use canonical source skeletons and do not benchmark the S06 algorithm outputs.",

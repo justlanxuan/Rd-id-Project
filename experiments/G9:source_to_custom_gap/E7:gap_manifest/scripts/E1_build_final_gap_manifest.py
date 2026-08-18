@@ -36,6 +36,7 @@ def main() -> int:
         "tracking_quality": e2 / "tracking_quality.json",
         "imu_contract_comparison": e2 / "imu_contract_comparison.json",
         "source_target_matrix": e3 / "source_target_matrix.json",
+        "prediction_stratification": e3 / "prediction_stratification.json",
     }
     missing = [name for name, path in inputs.items() if not path.exists()]
     if missing:
@@ -47,6 +48,7 @@ def main() -> int:
     imu = reports["imu_contract_comparison"]
     outlier = reports["coordinate_outlier_audit"]
     matrix = reports["source_target_matrix"]
+    prediction = reports["prediction_stratification"]
 
     manifest = {
         "schema_version": "g9-final-gap-manifest-1",
@@ -102,7 +104,7 @@ def main() -> int:
             },
             "motion_complexity": {
                 "status": "screened",
-                "evidence": "B1 per-source and Custom-session low/mid/high tertiles.",
+                "evidence": {"feature_screening": "B1 per-source and Custom-session low/mid/high tertiles.", "prediction_stratification": str(inputs["prediction_stratification"])},
             },
             "cross_modal_relation": {
                 "status": "screened_lag_correlation",
@@ -159,6 +161,11 @@ def main() -> int:
         ],
         "performance_evidence": {
             "existing_g6": matrix["existing_g6_cells"],
+            "existing_prediction_stratification": {
+                "path": str(inputs["prediction_stratification"]),
+                "clips_processed": prediction["clips_processed"],
+                "missing_segments": prediction["missing_segments"],
+            },
             "missing_controlled_cells": matrix["missing_controlled_cells"],
             "causal_claim_allowed": False,
         },
