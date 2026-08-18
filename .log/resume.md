@@ -19,6 +19,7 @@ G9 Plan：Source-to-Custom 骨架与跨模态域差异分解；E1 选择性门�
 - B2 完成 S06 coverage/tracklet/fragmentation 与 baseline visibility 对照；独立 ID switch 因输出继承 GT person order 且无独立 track IDs，标记为不可识别。
 - 发现关键 representation gap：EgoHumans/AlphaPose/YOLO-Pose 是 2D xy+visibility/zero-z，不能按 `[... ,3]` 当作 3D；S06 legacy48 IMU 的选定 L_LowArm acceleration energy 中位数约 22.8，而 canonical 7D 流约 125–129，需先统一 IMU contract。
 - C1 已将 S06 legacy48 转换到显式 7D contract；同时发现 Custom 有 1612/177120（0.91%）invalid quaternion frames（28 个 zero-norm），因此 Custom skeleton-target 可纳入，但 IMU/fusion 需报告过滤分母。
+- A4 已定位 YOLO-Pose high 的 996 个 `abs>10` 坐标（54/88 序列），包括 `custom_01_003` frame 184/person 0/joint 10/y=-30.47；EgoHumans raw xy 约 94.9% 坐标值绝对值大于 10，进一步确认必须分 representation/coordinate track。
 
 ## Blockers / Issues
 

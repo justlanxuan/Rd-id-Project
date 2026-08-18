@@ -53,6 +53,15 @@
 
 输出：`/data/fzliang/reid-project/g9/e1_gap_audit/semantic_audit.json`，其中包含全量 Custom fold CSV 映射、S06 baseline 的 person/IMU join 和最小可信子集。
 
+坐标/异常审计命令：
+
+```bash
+/home/fzliang/miniconda3/envs/reid_project/bin/python \\
+  experiments/G9:source_to_custom_gap/E1:gap-audit/scripts/A4_coordinate_outlier_audit.py
+```
+
+输出：`/data/fzliang/reid-project/g9/e1_gap_audit/coordinate_outlier_audit.json`，包含原始/根-躯干归一化分布、YOLO 极值帧/关节定位和同表示轨 pairwise 差异。
+
 Gap manifest 命令（只基于已审计 JSON，不训练）：
 
 ```bash

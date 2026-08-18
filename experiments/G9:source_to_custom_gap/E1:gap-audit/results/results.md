@@ -79,6 +79,15 @@
 6. “finite” 只证明数值可计算，不证明关节语义、身份或时间对齐；本轮 A2 才开始建立这些语义证据。
 7. A2 纠正了一个关键语义误读：数组 `[T,P,17,3]` 中，EgoHumans/AlphaPose/YOLO-Pose 的第 3 维是 visibility 或 zero-z，不是 3D 坐标；因此 E3 必须按 2D 与 3D 分轨。
 
+## Coordinate and YOLO outlier audit
+
+`A4_coordinate_outlier_audit.py` 已生成 `/data/fzliang/reid-project/g9/e1_gap_audit/coordinate_outlier_audit.json`。
+
+- EgoHumans raw xy 是明显的 pixel-like 空间：约 94.9% 原始坐标值绝对值大于 10；root/torso normalization 后分布落到约 `q01=-1.03, q50=0.059, q99=3.17`。
+- Custom raw xy 已接近归一化空间，原始 `abs>10` 比例约 `1.2e-5`；这支持把 EgoHumans raw 与 Custom raw 分开，不做静默 pooled distance。
+- YOLO-Pose high 有 996 个坐标值绝对值大于 10，分布在 54/88 个序列；极值包括 `custom_01_003.npz` frame 184、person 0、joint 10、y=`-30.47`，以及相邻帧/多个下肢关节的连续异常。异常不是单一 NaN/Inf，而是有限但语义可疑的坐标。
+- 同表示 root/torso-normalized AlphaPose↔YOLO 的坐标差中位数约 0.199、q99 约 3.50；3D 方法间差异中位数约 0.022–0.070。YOLO 保持 `conditional`，不进入第一版算法排名。
+
 ## Gap manifest（当前可信子集）
 
 已由 `A3_build_gap_profile.py` 生成：`/data/fzliang/reid-project/g9/e1_gap_audit/gap_profile.json`。该文件记录两个输入审计 JSON 的 SHA256、source gate 决策、坐标空间证据、person/IMU/time join、算法独立性以及四个可检验的 gap 假设：
