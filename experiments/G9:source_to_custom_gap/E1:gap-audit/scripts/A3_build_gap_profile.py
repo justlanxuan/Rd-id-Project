@@ -45,6 +45,7 @@ def main() -> int:
         quality = (sample.get("sample_quality") or [{}])[0]
         coordinate_evidence[name] = {
             "sample_shape": item.get("skeleton_shape"),
+            "representation": item.get("representation"),
             "coordinate_dim": item.get("coordinate_dim"),
             "sample_range": item.get("sample_range"),
             "inventory_quality": {
@@ -66,6 +67,7 @@ def main() -> int:
         method_evidence[method] = {
             "status": sources[method]["status"],
             "shape": item.get("skeleton_shape"),
+            "representation": item.get("representation"),
             "sample_range": item.get("sample_range"),
             "mapping": item.get("mapping"),
             "source_metadata": item.get("source"),

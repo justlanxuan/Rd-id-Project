@@ -54,6 +54,8 @@ G9 不新增一套训练 Dataset。复用 G6 canonical schema、WindowAlignmentD
 
 完成门：输出 `imu_distribution.json`、`cross_modal_alignment.json` 和逐 session 表。
 
+当前实现将这三类证据合并保存在 `/data/fzliang/reid-project/g9/e2_multimodal/multimodal_motion_diagnostics.json`，并明确 2D/3D representation、7D/legacy48 IMU layout 和采样/重采样 provenance；模型干预前仍需做统一 IMU contract 和归一化对照。
+
 ### E3：骨架 representation/source sweep
 
 目标：测量不同 skeleton source 对 transfer 的影响。
@@ -98,6 +100,8 @@ Custom 3D source（仅在真实 smoke 后追加）
 
 完成门：报告复杂度分布和每档 `correct/total`，不只报告整体平均。
 
+当前 screening 先输出每 source 的 low/mid/high motion-energy tertile 与运动特征；`correct/total` 需要接入正式预测矩阵后再计算。
+
 ### E5：时间、跟踪与身份关联分析
 
 目标：区分 temporal protocol gap 和 representation gap。
@@ -111,6 +115,8 @@ Custom 3D source（仅在真实 smoke 后追加）
 5. G8 的 history 策略不作为默认改进，只用于定位状态/身份误差。
 
 完成门：输出 lag、tracklet、candidate-group 与逐 session 结果；所有历史状态在 session 边界 reset。
+
+当前 `/data/fzliang/reid-project/g9/e2_multimodal/tracking_quality.json` 已输出 S06 coverage、candidate group、tracklet fragmentation 和 baseline visibility delta；由于输出没有独立 track IDs，ID switch 明确标记为不可识别。
 
 ### E6：适配干预
 

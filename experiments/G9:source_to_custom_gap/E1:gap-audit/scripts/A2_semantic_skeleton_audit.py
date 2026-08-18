@@ -69,6 +69,24 @@ def skeleton_array(archive: Any) -> tuple[str | None, np.ndarray | None]:
     return None, None
 
 
+def representation_label(archive: Any, skeleton: np.ndarray) -> str:
+    """Classify the last coordinate dimension without treating shape as semantics."""
+    if skeleton.ndim < 2:
+        return "unknown"
+    dim = skeleton.shape[-1]
+    if dim == 2:
+        return "2d_xy"
+    if dim != 3:
+        return f"last_dim_{dim}"
+    third = np.asarray(skeleton[..., 2])
+    visibility_like = bool(np.all((third >= 0) & (third <= 1)))
+    if "visibility" in archive and np.allclose(third, 0.0):
+        return "2d_xy_zero_z_with_external_visibility"
+    if visibility_like:
+        return "2d_xy_with_visibility_in_last_dim"
+    return "3d_xyz"
+
+
 def mapping_check(archive: Any) -> dict[str, Any]:
     result: dict[str, Any] = {"status": "not_available", "fields": {}}
     person_keys = ("gt_person_ids", "person_ids", "track_ids")
@@ -216,6 +234,7 @@ def file_semantics(path: Path) -> dict[str, Any]:
             result["status"] = "missing_skeleton_key"
             return result
         result["skeleton_shape"] = list(skeleton.shape)
+        result["representation"] = representation_label(archive, skeleton)
         result["skeleton_finite"] = finite_fraction(skeleton) == 1.0
         result["joint_count"] = int(skeleton.shape[-2]) if skeleton.ndim >= 3 else None
         result["coordinate_dim"] = int(skeleton.shape[-1]) if skeleton.ndim >= 2 else None

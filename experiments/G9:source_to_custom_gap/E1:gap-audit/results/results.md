@@ -41,10 +41,10 @@
 | Dataset/source | Representation | Files | Sample schema/quality | Status |
 |---|---|---:|---|---|
 | TotalCapture GT | 3D, 17 joints | 46 NPZ + 46 JSON | finite；`[T,1,17,3]`；sample bone CV 0.477 | included |
-| EgoHumans canonical | 3D, 17 joints | 30 NPZ + 30 JSON | finite；`[T,4,17,3]`；raw coordinate scale需确认 | included, normalization audit required |
-| Custom G6 canonical | 2D, 17 joints | 7380 NPZ + 4 JSON + 12 CSV | finite；`[24,17,2]`；sample bone CV 0.480 | included |
-| S06 AlphaPose | unified 3D, 17 joints | 88 NPZ | finite；`[T,4,17,3]`；sample bone CV 0.532 | included |
-| S06 YOLO-Pose high | unified 3D, 17 joints | 88 NPZ | finite；sample range约 `[-30.47,12.09]`；bone CV 1.355 | included, outlier audit required |
+| EgoHumans canonical | 2D xy + visibility, 17 joints | 30 NPZ + 30 JSON | finite；`[T,4,17,3]`，第 3 维为 visibility；raw pixel scale需确认 | included, 2D track |
+| Custom G6 canonical | 2D xy, 17 joints | 7380 NPZ + 4 JSON + 12 CSV | finite；`[24,17,2]`；sample bone CV 0.480 | included |
+| S06 AlphaPose | 2D xy + external visibility (zero z), 17 joints | 88 NPZ | finite；`[T,4,17,3]`，z 全零；sample bone CV 0.532 | included |
+| S06 YOLO-Pose high | 2D xy + external visibility (zero z), 17 joints | 88 NPZ | finite；sample range约 `[-30.47,12.09]`；bone CV 1.355 | conditional, outlier audit required |
 | S06 FMPose3D | unified 3D, 17 joints | 88 NPZ | finite；sample bone CV 0.489 | included |
 | S06 MotionAGFormer | unified 3D, 17 joints | 88 NPZ | finite；sample bone CV 0.513 | included |
 | S06 TCPFormer | unified 3D, 17 joints | 88 NPZ | finite；sample bone CV 0.474 | included |
@@ -60,10 +60,10 @@
 | Source | Sample coordinate dim | Finite | Bone CV | Initial note |
 |---|---:|---:|---:|---|
 | TotalCapture GT | 3 | 1.0 | 0.477 | reference scale |
-| EgoHumans canonical | 3 | 1.0 | 0.866–0.971 | raw coordinate magnitude much larger，需核对 normalization |
+| EgoHumans canonical | 3 (xy+visibility) | 1.0 | 0.866–0.971 | 第 3 维不是 z；raw pixel coordinate magnitude much larger，需核对 normalization |
 | Custom canonical | 2 | 1.0 | 0.480 | normalized 2D sample |
-| S06 AlphaPose | 3 | 1.0 | 0.532 | finite |
-| S06 YOLO-Pose high | 3 | 1.0 | 1.355 | large coordinate outlier，需逐关节审计 |
+| S06 AlphaPose | 3 (xy+zero-z) | 1.0 | 0.532 | 2D output with external visibility |
+| S06 YOLO-Pose high | 3 (xy+zero-z) | 1.0 | 1.355 | large coordinate outlier，需逐关节审计 |
 | S06 FMPose3D | 3 | 1.0 | 0.489 | finite |
 | S06 MotionAGFormer | 3 | 1.0 | 0.513 | finite |
 | S06 TCPFormer | 3 | 1.0 | 0.474 | finite |
@@ -77,6 +77,7 @@
 4. YOLO-Pose high sample 的 bone CV 和坐标范围异常大，优先进入 E1 outlier audit；在确认是否为合法坐标空间前，不做算法排名。
 5. E1 后续必须补充逐文件 hash、missing/confidence/tracklet 汇总和 source/Custom 可配对 sequence 覆盖率。
 6. “finite” 只证明数值可计算，不证明关节语义、身份或时间对齐；本轮 A2 才开始建立这些语义证据。
+7. A2 纠正了一个关键语义误读：数组 `[T,P,17,3]` 中，EgoHumans/AlphaPose/YOLO-Pose 的第 3 维是 visibility 或 zero-z，不是 3D 坐标；因此 E3 必须按 2D 与 3D 分轨。
 
 ## Gap manifest（当前可信子集）
 
