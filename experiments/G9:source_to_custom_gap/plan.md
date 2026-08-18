@@ -145,6 +145,7 @@ Custom 3D source（仅在真实 smoke 后追加）
 
 ```text
 gap_profile.json
+g9_final_gap_manifest.json
 skeleton_source_quality.json
 imu_distribution.json
 cross_modal_alignment.json
@@ -206,5 +207,6 @@ results.md
 - IMU、cross-modal、复杂度、tracking、时间 gap 报告；
 - source/target skeleton sweep 和 adaptation 结果；
 - 自动生成的 `results.md` 与机器可读 JSON；
+- `/data/fzliang/reid-project/g9/g9_final_gap_manifest.json` 及其输入 hash；
 - HAROS progress/resume/experience 更新；
 - 经人类审核后再决定是否创建 Git commit。

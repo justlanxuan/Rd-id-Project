@@ -247,7 +247,11 @@ def source_files(source: str) -> list[tuple[Path, str, Path | None]]:
         return [(path, path.stem, None) for path in sorted(EGO_ROOT.glob("*.npz"))]
     if source == "custom_canonical":
         paths = sorted(CUSTOM_ROOT.glob("fold*/sequences/*.npz"))
-        return [(path, path.parent.parent.name, None) for path in paths]
+        def session_group(path: Path) -> str:
+            tokens = path.stem.split("_")
+            return "_".join(tokens[1:3]) if len(tokens) >= 3 else path.parent.parent.name
+
+        return [(path, session_group(path), None) for path in paths]
     if source.startswith("s06_"):
         method = source.removeprefix("s06_")
         paths = sorted((S06_ROOT / method).glob("*.npz"))

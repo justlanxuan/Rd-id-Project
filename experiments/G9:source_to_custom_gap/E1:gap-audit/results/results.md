@@ -86,7 +86,7 @@
 - EgoHumans raw xy 是明显的 pixel-like 空间：约 94.9% 原始坐标值绝对值大于 10；root/torso normalization 后分布落到约 `q01=-1.03, q50=0.059, q99=3.17`。
 - Custom raw xy 已接近归一化空间，原始 `abs>10` 比例约 `1.2e-5`；这支持把 EgoHumans raw 与 Custom raw 分开，不做静默 pooled distance。
 - YOLO-Pose high 有 996 个坐标值绝对值大于 10，分布在 54/88 个序列；极值包括 `custom_01_003.npz` frame 184、person 0、joint 10、y=`-30.47`，以及相邻帧/多个下肢关节的连续异常。异常不是单一 NaN/Inf，而是有限但语义可疑的坐标。
-- 同表示 root/torso-normalized AlphaPose↔YOLO 的坐标差中位数约 0.199、q99 约 3.50；3D 方法间差异中位数约 0.022–0.070。YOLO 保持 `conditional`，不进入第一版算法排名。
+- 同表示 AlphaPose↔YOLO 的 raw 与 root/torso-normalized 坐标差几乎不变（中位数约 0.199、q99 约 3.50）；S06 3D 方法间归一化差异中位数约 0.022–0.070。说明 S06 输出已接近 root/torso-scaled，单纯再次归一化不会消除 YOLO 差异；YOLO 保持 `conditional`，不进入第一版算法排名。
 
 ## Gap manifest（当前可信子集）
 

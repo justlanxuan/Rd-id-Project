@@ -136,7 +136,7 @@ def source_summary(source: str, max_files: int | None) -> dict[str, Any]:
 
 
 def normalized_pairwise() -> dict[str, Any]:
-    pairs: dict[str, list[float]] = defaultdict(list)
+    pairs: dict[str, dict[str, list[float]]] = defaultdict(lambda: {"raw": [], "root_torso_normalized": []})
     methods = list(METHODS)
     for left_index, left_method in enumerate(methods):
         for right_method in methods[left_index + 1 :]:
@@ -158,9 +158,16 @@ def normalized_pairwise() -> dict[str, Any]:
                 valid = left_valid & right_valid
                 if not np.any(valid):
                     continue
-                delta = np.abs(left_n - right_n)[valid]
-                pairs[key].extend(delta[np.isfinite(delta)].reshape(-1).tolist())
-    return {method: quantile(values) for method, values in sorted(pairs.items())}
+                left_coords = left[..., :2] if representation(left, left_vis).startswith("2d_") else left
+                right_coords = right[..., :2] if representation(right, right_vis).startswith("2d_") else right
+                raw_delta = np.abs(left_coords - right_coords)[valid]
+                normalized_delta = np.abs(left_n - right_n)[valid]
+                pairs[key]["raw"].extend(raw_delta[np.isfinite(raw_delta)].reshape(-1).tolist())
+                pairs[key]["root_torso_normalized"].extend(normalized_delta[np.isfinite(normalized_delta)].reshape(-1).tolist())
+    return {
+        method: {name: quantile(values) for name, values in tracks.items()}
+        for method, tracks in sorted(pairs.items())
+    }
 
 
 def main() -> int:
