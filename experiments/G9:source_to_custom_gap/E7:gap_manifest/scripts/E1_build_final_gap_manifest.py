@@ -37,6 +37,7 @@ def main() -> int:
         "imu_contract_comparison": e2 / "imu_contract_comparison.json",
         "source_target_matrix": e3 / "source_target_matrix.json",
         "prediction_stratification": e3 / "prediction_stratification.json",
+        "s06_sweep_summary": e3 / "s06_eval" / "s06_sweep_summary.json",
     }
     missing = [name for name, path in inputs.items() if not path.exists()]
     if missing:
@@ -49,6 +50,11 @@ def main() -> int:
     outlier = reports["coordinate_outlier_audit"]
     matrix = reports["source_target_matrix"]
     prediction = reports["prediction_stratification"]
+    s06_sweep = reports["s06_sweep_summary"]
+    missing_controlled_cells = [
+        item for item in matrix["missing_controlled_cells"]
+        if "S06 skeleton-source sweep" not in item
+    ]
 
     manifest = {
         "schema_version": "g9-final-gap-manifest-1",
@@ -73,8 +79,8 @@ def main() -> int:
                 "s06": {name: value.get("representation") for name, value in semantic["s06_methods"].items()},
             },
             "coordinate_space": {
-                "status": "audited_normalization_control_pending",
-                "evidence": "EgoHumans raw xy is pixel-like; Custom is normalized-like; S06 3D outputs are root/torso-scaled by metadata; A4 provides root/torso controlled summaries.",
+                "status": "audited_fixed_checkpoint_intervention_mixed_effect",
+                "evidence": "EgoHumans raw xy is pixel-like; Custom is normalized-like; S06 3D outputs are root/torso-scaled by metadata. D3/D4 screen calibration changes FrameAcc by source-specific deltas; this is not a universal repair.",
             },
             "person_imu_alignment": {
                 "status": "verified_with_external_join_where_needed",
@@ -119,8 +125,15 @@ def main() -> int:
             {
                 "id": "GAP-REP-01",
                 "factor": "2D/3D representation and coordinate normalization",
-                "support": "strong observational",
-                "intervention": "root/torso normalization and representation-separated sweep pending",
+                "support": "controlled fixed-checkpoint intervention with mixed source-specific effects",
+                "intervention": "D3/D4 screen-calibrated sweep completed; full-xyz encoder/retraining still pending",
+                "controlled_evidence": {
+                    "path": str(inputs["s06_sweep_summary"]),
+                    "cells": len(s06_sweep["cells"]),
+                    "sequence_deltas": len(s06_sweep["sequence_deltas"]),
+                    "method_deltas": s06_sweep["method_deltas"],
+                    "interpretation": s06_sweep["interpretation"],
+                },
             },
             {
                 "id": "GAP-IMU-01",
@@ -166,14 +179,19 @@ def main() -> int:
                 "clips_processed": prediction["clips_processed"],
                 "missing_segments": prediction["missing_segments"],
             },
-            "missing_controlled_cells": matrix["missing_controlled_cells"],
+            "s06_fixed_checkpoint_sweep": {
+                "path": str(inputs["s06_sweep_summary"]),
+                "cells": len(s06_sweep["cells"]),
+                "missing": s06_sweep["missing"],
+                "causal_scope": s06_sweep["interpretation"]["causal_scope"],
+            },
+            "missing_controlled_cells": missing_controlled_cells,
             "causal_claim_allowed": False,
         },
         "next_required_controls": [
-            "Run source skeleton sweep with fixed verified IMU and Custom target, split 2D/3D.",
-            "Run normalized versus raw coordinate controls without changing held-out sessions.",
+            "Run full 2D/3D representation-controlled transfer with a full-xyz-compatible encoder or retrained checkpoint.",
             "Run IMU-only/skeleton-only/fusion with invalid-quaternion filtered denominators.",
-            "Emit prediction-level complexity/visibility/tracklet correct-total tables.",
+            "Emit prediction-level complexity/visibility/tracklet correct-total tables for the new S06 sources.",
             "Add raw detector track IDs before claiming ID-switch attribution.",
         ],
     }
