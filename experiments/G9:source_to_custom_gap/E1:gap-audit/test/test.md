@@ -27,10 +27,10 @@
 
 ## 通过标准
 
-- 所有正式源通过 schema/content/provenance validator；
+- 每个 source 都有 `included/conditional/excluded/pending` 决策和理由；`included` 子集通过 schema/content/provenance validator；
 - inventory 能重算 joint、bone、missing、confidence、tracklet 摘要；
 - manifest hash 不依赖绝对路径或 mtime；
-- 报告能列出每个 source 的 `included/excluded/pending` 状态和理由。
+- 报告能列出每个 source 的状态和理由；只要 source、Custom target、person/IMU/time join 的最小可信子集存在，就允许继续 gap 分析。
 
 ## 运行方式
 
@@ -43,5 +43,14 @@
 ```
 
 输出：`/data/fzliang/reid-project/g9/e1_gap_audit/source_inventory.json`。
+
+语义审计命令：
+
+```bash
+/home/fzliang/miniconda3/envs/reid_project/bin/python \\
+  experiments/G9:source_to_custom_gap/E1:gap-audit/scripts/A2_semantic_skeleton_audit.py
+```
+
+输出：`/data/fzliang/reid-project/g9/e1_gap_audit/semantic_audit.json`，其中包含全量 Custom fold CSV 映射、S06 baseline 的 person/IMU join 和最小可信子集。
 
 本命令只读取已有 artifact；大型 NPZ 超过阈值时只记录文件信息，不解压到内存。E1 最终通过前，还必须追加全量/多序列 fingerprint、逐关节 outlier 和 source/Custom coverage 检查。E1 只做只读审计，不启动训练。

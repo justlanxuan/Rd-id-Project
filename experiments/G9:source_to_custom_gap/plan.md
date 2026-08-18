@@ -38,7 +38,7 @@ G9 不新增一套训练 Dataset。复用 G6 canonical schema、WindowAlignmentD
 4. 对相同覆盖率或相同 sequence 的算法计算 pairwise hash、相关性和数值重复率。
 5. 建立 source availability matrix，明确哪些算法在 source、Custom、验证 smoke 中真实存在。
 
-完成门：无空/全零/非法 mapping；每个正式源有 provenance；疑似重复产物被标记并排除或解释。
+完成门：无空/全零/非法 mapping；每个候选源有 provenance；疑似重复产物被标记并排除或解释。门禁按 source 独立输出 `included/conditional/excluded/pending`，不要求所有候选源同时通过；至少一个 source 和一个 Custom target 形成可重算的最小可信子集即可继续 E2/E3。
 
 ### E2：IMU 与跨模态配准审计
 
