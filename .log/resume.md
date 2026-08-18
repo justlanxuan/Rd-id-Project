@@ -14,6 +14,7 @@ G9 Plan：Source-to-Custom 骨架与跨模态域差异分解；当前处于 E1 �
 - E1 A1 sample inventory 已运行，14 个入口存在，抽样数据 finite，未发现 exact duplicate fingerprint group。
 - E1 A2 语义审计已运行：Custom 四 fold 的 7380 行窗口映射一致；S06 train/val 108 个 baseline 的 person/IMU 映射一致；S06 同序列 15 对算法无 exact duplicate。
 - 已按 source 输出 `included/conditional/pending`：当前最小可信子集为 TotalCapture GT、EgoHumans canonical、Custom canonical、AlphaPose、FMPose3D、MotionAGFormer、TCPFormer、WHAM；YOLO-Pose high 暂为 conditional。
+- 已生成 `/data/fzliang/reid-project/g9/e1_gap_audit/gap_profile.json`，将坐标、时间/身份、质量和跨模态因素拆成可验证假设。
 
 ## Blockers / Issues
 
@@ -25,5 +26,5 @@ G9 Plan：Source-to-Custom 骨架与跨模态域差异分解；当前处于 E1 �
 
 1. 扩展 E1 content fingerprint 到同 sequence 多算法和多序列；
 2. 审计 EgoHumans raw/normalized 坐标与 YOLO-Pose high outlier；
-3. 在最小可信子集上生成 `gap_profile.json`；
+3. 审计坐标空间与 YOLO-Pose high outlier；
 4. 冻结 G9 protocol version 后启动 IMU-only、skeleton-only、fusion 和 skeleton-source sweep。

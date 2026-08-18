@@ -53,4 +53,13 @@
 
 输出：`/data/fzliang/reid-project/g9/e1_gap_audit/semantic_audit.json`，其中包含全量 Custom fold CSV 映射、S06 baseline 的 person/IMU join 和最小可信子集。
 
+Gap manifest 命令（只基于已审计 JSON，不训练）：
+
+```bash
+/home/fzliang/miniconda3/envs/reid_project/bin/python \\
+  experiments/G9:source_to_custom_gap/E1:gap-audit/scripts/A3_build_gap_profile.py
+```
+
+输出：`/data/fzliang/reid-project/g9/e1_gap_audit/gap_profile.json`。
+
 本命令只读取已有 artifact；大型 NPZ 超过阈值时只记录文件信息，不解压到内存。E1 最终通过前，还必须追加全量/多序列 fingerprint、逐关节 outlier 和 source/Custom coverage 检查。E1 只做只读审计，不启动训练。

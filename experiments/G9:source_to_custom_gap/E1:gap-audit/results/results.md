@@ -77,3 +77,14 @@
 4. YOLO-Pose high sample 的 bone CV 和坐标范围异常大，优先进入 E1 outlier audit；在确认是否为合法坐标空间前，不做算法排名。
 5. E1 后续必须补充逐文件 hash、missing/confidence/tracklet 汇总和 source/Custom 可配对 sequence 覆盖率。
 6. “finite” 只证明数值可计算，不证明关节语义、身份或时间对齐；本轮 A2 才开始建立这些语义证据。
+
+## Gap manifest（当前可信子集）
+
+已由 `A3_build_gap_profile.py` 生成：`/data/fzliang/reid-project/g9/e1_gap_audit/gap_profile.json`。该文件记录两个输入审计 JSON 的 SHA256、source gate 决策、坐标空间证据、person/IMU/time join、算法独立性以及四个可检验的 gap 假设：
+
+1. 坐标归一化/表示空间差异（`GAP-COORD-01`）；
+2. Custom window CSV 承担 timing/provenance，NPZ 本身缺少 frame/person 字段（`GAP-TIME-01`）；
+3. YOLO-Pose high 的 coverage/outlier 差异（`GAP-QUALITY-01`）；
+4. 在身份映射控制后再检验 IMU 边际分布和跨模态关系（`GAP-MODAL-01`）。
+
+这不是最终性能结论：它是进入 E2/E3 前的可追溯假设清单，第一版正式矩阵只允许使用 gate 中的 `included` 子集。
