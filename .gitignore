@@ -3,11 +3,15 @@
 /data/interim/
 /experiments/*
 !/experiments/G8:full_session_tracklet_history/
+!/experiments/G9:source_to_custom_gap/
+!/experiments/G9:source_to_custom_gap/**
 /visual/
 
 **/__pycache__/
 *.py[cod]
 /.log/
+!/.log/
+!/.log/**
 /.runbook/
 /.pytest_cache/
 /.ruff_cache/
