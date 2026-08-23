@@ -25,7 +25,7 @@ def test_hybrid_model_is_built_through_model_registry_and_has_stable_output():
         skeleton=torch.zeros(2, 24, 17, 3),
     )
 
-    assert MODEL_REGISTRY.names() == ("hybrid",)
+    assert MODEL_REGISTRY.names() == ("hybrid", "orientation_aware")
     assert name == "hybrid"
     assert set(output) == {"imu", "video"}
     assert output["imu"].shape == (2, 32)

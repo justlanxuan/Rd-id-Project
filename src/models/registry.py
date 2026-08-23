@@ -19,6 +19,13 @@ def _build_hybrid(cfg: Any, device: torch.device) -> IMUVideoMatcher:
     return build_hybrid_model(cfg, device)
 
 
+@MODEL_REGISTRY.register("orientation_aware")
+def _build_orientation_aware(cfg: Any, device: torch.device):
+    from .orientation import build_orientation_model
+
+    return build_orientation_model(cfg, device)
+
+
 def build_model(cfg: Any, device: torch.device) -> tuple[IMUVideoMatcher, str]:
     model_type = str(getattr(cfg.TRAIN.MODEL, "TYPE", "hybrid"))
     canonical_name = MODEL_REGISTRY.resolve_name(model_type)

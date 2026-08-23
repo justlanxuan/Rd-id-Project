@@ -14,7 +14,13 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from src.config import load_cfg
-from src.datasets import SameWindowBatchSampler, WindowAlignmentDataset
+from src.datasets import (
+    DomainBalancedGroupBatchSampler,
+    OrientationHardNegativeBatchSampler,
+    SameWindowBatchSampler,
+    WindowAlignmentDataset,
+    build_orientation_dataset,
+)
 from src.engine.augmentation import maybe_augment_inputs
 from src.engine.batch import (
     build_subject_label_map,
@@ -32,6 +38,9 @@ from src.engine.losses import (
     retrieval_top1,
     subject_contrastive_loss,
     subject_retrieval_top1,
+    turning_alignment_loss,
+    turning_onset_loss,
+    weighted_info_nce,
     window_contrastive_loss,
     window_contrastive_top1,
 )
@@ -71,6 +80,22 @@ def require_finite_metrics(metrics: dict[str, float], *, epoch: int) -> None:
         raise FloatingPointError(
             f"Non-finite validation metrics at epoch={epoch}: {invalid}; refusing checkpoint write."
         )
+
+
+def clip_grad_norm_stable(parameters, max_norm: float) -> torch.Tensor:
+    """Clip in float64 so large orientation gradients do not overflow norm accumulation."""
+    params = [param for param in parameters if param.requires_grad and param.grad is not None]
+    if not params:
+        return torch.zeros((), dtype=torch.float64)
+    squared = torch.stack([param.grad.detach().double().norm().square() for param in params])
+    total_norm = torch.sqrt(squared.sum())
+    if not torch.isfinite(total_norm):
+        return total_norm
+    if float(max_norm) > 0.0 and total_norm > float(max_norm):
+        scale = float(max_norm) / (float(total_norm) + 1e-12)
+        for param in params:
+            param.grad.mul_(scale)
+    return total_norm
 
 
 def main() -> None:
@@ -129,22 +154,23 @@ def main() -> None:
         print(f"[INFO] Loaded per-session stats for {len(per_session_stats)} sessions: {sorted(per_session_stats.keys())}")
 
     imu_sensor = T.IMU_SENSOR.strip() if T.IMU_SENSOR else None
-    train_ds = WindowAlignmentDataset(
-        P.TRAIN_CSV,
-        root_dir=P.DATA_ROOT,
-        imu_mean=imu_mean,
-        imu_std=imu_std,
-        imu_sensor=imu_sensor,
-        repeat_single_sensor=T.REPEAT_SINGLE_SENSOR,
-        imu_lowpass_cutoff_hz=IMU_PRE.LOWPASS_CUTOFF_HZ,
-        imu_lowpass_fs_hz=IMU_PRE.LOWPASS_FS_HZ,
-        return_root_trajectory=False,
-        root_source="auto",
-        per_session_stats=per_session_stats,
-    )
-    try:
-        val_ds = WindowAlignmentDataset(
-            P.VAL_CSV,
+    if capabilities.requires_orientation:
+        train_ds = build_orientation_dataset(cfg, "train")
+        try:
+            val_ds = build_orientation_dataset(cfg, "val")
+        except ValueError as e:
+            if "No rows found" in str(e):
+                print("[WARN] Orientation validation spec is empty. Validation will be skipped.")
+                val_ds = None
+            else:
+                raise
+        print(
+            "[INFO] Orientation branch enabled: "
+            f"mode={T.ORIENTATION.MODE}, profile={T.ORIENTATION.PROFILE}, fusion={T.ORIENTATION.FUSION}"
+        )
+    else:
+        train_ds = WindowAlignmentDataset(
+            P.TRAIN_CSV,
             root_dir=P.DATA_ROOT,
             imu_mean=imu_mean,
             imu_std=imu_std,
@@ -156,14 +182,57 @@ def main() -> None:
             root_source="auto",
             per_session_stats=per_session_stats,
         )
-    except ValueError as e:
-        if "No rows found" in str(e):
-            print(f"[WARN] Validation CSV is empty: {P.VAL_CSV}. Validation will be skipped.")
-            val_ds = None
-        else:
-            raise
+        try:
+            val_ds = WindowAlignmentDataset(
+                P.VAL_CSV,
+                root_dir=P.DATA_ROOT,
+                imu_mean=imu_mean,
+                imu_std=imu_std,
+                imu_sensor=imu_sensor,
+                repeat_single_sensor=T.REPEAT_SINGLE_SENSOR,
+                imu_lowpass_cutoff_hz=IMU_PRE.LOWPASS_CUTOFF_HZ,
+                imu_lowpass_fs_hz=IMU_PRE.LOWPASS_FS_HZ,
+                return_root_trajectory=False,
+                root_source="auto",
+                per_session_stats=per_session_stats,
+            )
+        except ValueError as e:
+            if "No rows found" in str(e):
+                print(f"[WARN] Validation CSV is empty: {P.VAL_CSV}. Validation will be skipped.")
+                val_ds = None
+            else:
+                raise
 
-    if bool(getattr(T, "GROUP_BATCH_BY_WINDOW", False)):
+    if capabilities.requires_orientation and str(T.ORIENTATION.SAMPLER).lower() == "domain_balanced":
+        train_loader = DataLoader(
+            train_ds,
+            batch_sampler=DomainBalancedGroupBatchSampler(
+                train_ds,
+                batch_size=int(T.ORIENTATION.BATCH_SIZE),
+                seed=int(T.SEED),
+                steps=int(T.ORIENTATION.STEPS_PER_EPOCH) or None,
+            ),
+            num_workers=T.NUM_WORKERS,
+            pin_memory=True,
+        )
+        print("[INFO] Using orientation domain-balanced group sampler.")
+    elif capabilities.requires_orientation and str(T.ORIENTATION.SAMPLER).lower() == "orientation_hard":
+        sampler_steps = int(T.ORIENTATION.STEPS_PER_EPOCH) or max(1, len(train_ds) // int(T.ORIENTATION.BATCH_SIZE))
+        train_loader = DataLoader(
+            train_ds,
+            batch_sampler=OrientationHardNegativeBatchSampler(
+                train_ds,
+                batch_size=int(T.ORIENTATION.BATCH_SIZE),
+                seed=int(T.SEED),
+                steps=sampler_steps,
+                pool_multiplier=int(T.ORIENTATION.HARD_POOL_MULTIPLIER),
+                hard_fraction=float(T.ORIENTATION.HARD_FRACTION),
+            ),
+            num_workers=T.NUM_WORKERS,
+            pin_memory=True,
+        )
+        print("[INFO] Using orientation hard-negative sampler.")
+    elif bool(getattr(T, "GROUP_BATCH_BY_WINDOW", False)):
         train_loader = DataLoader(
             train_ds,
             batch_sampler=SameWindowBatchSampler(
@@ -179,7 +248,7 @@ def main() -> None:
     else:
         train_loader = DataLoader(
             train_ds,
-            batch_size=T.BATCH_SIZE,
+            batch_size=int(T.ORIENTATION.BATCH_SIZE) if capabilities.requires_orientation else T.BATCH_SIZE,
             shuffle=True,
             num_workers=T.NUM_WORKERS,
             pin_memory=True,
@@ -187,7 +256,9 @@ def main() -> None:
         )
     val_loader = None
     if val_ds is not None:
-        val_batch_size = len(val_ds) if capabilities.full_validation_batch else T.BATCH_SIZE
+        val_batch_size = len(val_ds) if capabilities.full_validation_batch else (
+            int(T.ORIENTATION.BATCH_SIZE) if capabilities.requires_orientation else T.BATCH_SIZE
+        )
         val_loader = DataLoader(
             val_ds,
             batch_size=val_batch_size,
@@ -317,6 +388,8 @@ def main() -> None:
             b = move_to_device(batch, device)
             b["imu"], b["skeleton"] = maybe_augment_inputs(b["imu"], b["skeleton"], cfg)
             forward_kwargs = {"imu": b["imu"], "skeleton": b["skeleton"]}
+            if capabilities.requires_orientation:
+                forward_kwargs["orientation"] = b["orientation"]
             if "root_trajectory" in b:
                 forward_kwargs["root_trajectory"] = b["root_trajectory"]
             out = model(**forward_kwargs)
@@ -346,6 +419,24 @@ def main() -> None:
                 main_loss = window_contrastive_loss(out["imu"], out["video"], group_labels_for_main, loss_fn)
             else:
                 main_loss = loss_fn(out["imu"], video_for_loss, labels_a=labels_a, labels_b=labels_b)
+
+            turning_loss = torch.zeros((), device=main_loss.device)
+            onset_loss = torch.zeros((), device=main_loss.device)
+            if capabilities.requires_orientation:
+                orientation_cfg = T.ORIENTATION
+                if float(orientation_cfg.AUX_TURNING_WEIGHT) > 0.0:
+                    activity_weight = 1.0 + float(orientation_cfg.AUX_TURNING_WEIGHT) * b["orientation"][:, :, 4].mean(dim=1)
+                    main_loss, _ = weighted_info_nce(
+                        out["imu"], out["video"], activity_weight, temperature=float(T.TEMPERATURE)
+                    )
+                if float(orientation_cfg.TURNING_LOSS_WEIGHT) > 0.0:
+                    if "turning_activity_pred" not in out:
+                        raise ValueError("TRAIN.ORIENTATION.TURNING_LOSS_WEIGHT requires ORIENTATION.ENABLED=true")
+                    turning_loss = turning_alignment_loss(out["turning_activity_pred"], b["imu"])
+                if float(orientation_cfg.TURN_ONSET_WEIGHT) > 0.0:
+                    if "orientation_onset_logits" not in out:
+                        raise ValueError("TRAIN.ORIENTATION.TURN_ONSET_WEIGHT requires ORIENTATION.ENABLED=true")
+                    onset_loss = turning_onset_loss(out, b["orientation"])
 
             domain_loss = torch.zeros((), device=main_loss.device)
             if use_domain:
@@ -386,6 +477,8 @@ def main() -> None:
                 + float(T.ID_LOSS_WEIGHT) * id_loss
                 + float(T.PAIR_LOSS_WEIGHT) * pair_loss
                 + float(getattr(T, "PAIR_ANTI_TIE_WEIGHT", 0.0)) * anti_tie_loss
+                + float(T.ORIENTATION.TURNING_LOSS_WEIGHT) * turning_loss
+                + float(T.ORIENTATION.TURN_ONSET_WEIGHT) * onset_loss
             )
 
             require_finite_tensor(loss, name="training loss", epoch=epoch, step=step)
@@ -393,8 +486,8 @@ def main() -> None:
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             if T.MAX_GRAD_NORM > 0:
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    [p for p in list(model.parameters()) + loss_params + id_params if p.requires_grad],
+                grad_norm = clip_grad_norm_stable(
+                    list(model.parameters()) + loss_params + id_params,
                     T.MAX_GRAD_NORM,
                 )
                 require_finite_tensor(grad_norm, name="gradient norm", epoch=epoch, step=step)

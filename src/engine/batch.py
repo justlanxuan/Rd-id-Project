@@ -16,8 +16,13 @@ def move_to_device(batch: Dict[str, torch.Tensor], device: torch.device) -> Dict
     }
     if "root_trajectory" in batch:
         result["root_trajectory"] = batch["root_trajectory"].to(device)
+    if "orientation" in batch:
+        result["orientation"] = batch["orientation"].to(device)
     if "domain" in batch:
         result["domain"] = batch["domain"]
+    for key in ("subject", "session", "split", "group_key"):
+        if key in batch:
+            result[key] = batch[key]
     return result
 
 

@@ -54,6 +54,8 @@ def evaluate_epoch(
         for batch in data_loader:
             b = move_to_device(batch, device)
             forward_kwargs = {"imu": b["imu"], "skeleton": b["skeleton"]}
+            if getattr(getattr(model, "capabilities", None), "requires_orientation", False):
+                forward_kwargs["orientation"] = b["orientation"]
             if "root_trajectory" in b:
                 forward_kwargs["root_trajectory"] = b["root_trajectory"]
             out = model(**forward_kwargs)

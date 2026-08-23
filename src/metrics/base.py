@@ -16,6 +16,8 @@ class EmbeddingBundle:
     rows: list[dict[str, str]]
     imu: np.ndarray
     video: np.ndarray
+    orientation: np.ndarray | None = None
+    imu_sequences: np.ndarray | None = None
 
 
 class EvaluationMetric(ABC):

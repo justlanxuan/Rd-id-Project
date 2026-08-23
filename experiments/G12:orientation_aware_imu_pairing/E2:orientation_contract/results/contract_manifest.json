@@ -1,0 +1,53 @@
+{
+  "schema_version": "g12.orientation_contract.v1",
+  "status": "frozen_contract_before_pairing_ablation",
+  "joint_layout": {
+    "canonical": "H36M17",
+    "order": [
+      "pelvis", "right_hip", "right_knee", "right_ankle", "left_hip", "left_knee", "left_ankle",
+      "spine", "thorax", "neck", "head", "left_shoulder", "left_elbow", "left_wrist",
+      "right_shoulder", "right_elbow", "right_wrist"
+    ],
+    "shoulder_axis": "right_shoulder-left_shoulder",
+    "up_vector": "thorax-pelvis"
+  },
+  "tracks": {
+    "2d_proxy": {
+      "sources": ["yolopose_high", "alphapose"],
+      "coordinate_frame": "image_xy_required",
+      "angle_period_rad": 3.141592653589793,
+      "angle_sin_cos": ["sin(2*angle)", "cos(2*angle)"],
+      "world_yaw": false,
+      "front_back_identifiable": false
+    },
+    "3d_derived": {
+      "sources": ["fmpose3d", "motionagformer", "tcpformer", "wham_canonical"],
+      "coordinate_frame": "must_be_declared_per_source",
+      "forward_definition": "cross(lateral,up) or explicitly declared reverse",
+      "angle_period_rad": 6.283185307179586,
+      "angle_sin_cos": ["sin(angle)", "cos(angle)"],
+      "direct_rotation": false
+    },
+    "direct": {
+      "sources": ["wham_raw_root_orient", "wham_raw_pose_world"],
+      "input": ["axis_angle_rad", "quaternion_declared_order"],
+      "quaternion_sign_continuity": true,
+      "sixd": "rotation_matrix_first_two_columns_row_major",
+      "angle_period_rad": 6.283185307179586,
+      "coordinate_frame": "must_be_declared_per_artifact"
+    },
+    "orientation_missing": {
+      "sources": ["custom_current_canonical"],
+      "world_yaw_allowed": false,
+      "proxy_allowed_only_as_diagnostic": true
+    }
+  },
+  "validity": {
+    "timestamps": "strictly_increasing_seconds",
+    "orientation_valid": "frame angle/direction is finite and non-degenerate",
+    "rate_valid": "at least two contiguous valid frames with real timestamps",
+    "derivative": "never crosses missing or degenerate segments"
+  },
+  "implementation": "src/features/orientation.py",
+  "ablation_status": "not_started"
+}

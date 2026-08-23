@@ -58,8 +58,8 @@ class SymmetricInfoNCE(nn.Module):
         if z_a.shape != z_b.shape:
             raise ValueError(f"Shape mismatch: {z_a.shape} vs {z_b.shape}")
 
-        z_a = F.normalize(z_a, dim=-1)
-        z_b = F.normalize(z_b, dim=-1)
+        z_a = F.normalize(z_a, dim=-1, eps=1e-6)
+        z_b = F.normalize(z_b, dim=-1, eps=1e-6)
 
         if hasattr(self, "log_temperature"):
             t = torch.exp(self.log_temperature).clamp(0.02, 0.5)
@@ -97,8 +97,8 @@ def retrieval_top1(
     Returns:
         Top-1 retrieval accuracy (0.0 - 1.0)
     """
-    z_a = F.normalize(z_a, dim=-1)
-    z_b = F.normalize(z_b, dim=-1)
+    z_a = F.normalize(z_a, dim=-1, eps=1e-6)
+    z_b = F.normalize(z_b, dim=-1, eps=1e-6)
     sims = torch.matmul(z_a, z_b.t())
 
     if labels_a is None:

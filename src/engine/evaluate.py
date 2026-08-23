@@ -29,10 +29,11 @@ from preprocess.datasets.custom import (
     load_custom_split_7d_sequence,
 )
 from src.config import load_cfg
-from src.datasets import WindowAlignmentDataset
+from src.datasets import WindowAlignmentDataset, build_orientation_dataset
 from src.engine.similarity import encode_hybrid_precomputed, model_similarity_matrix
 from src.experiments import write_evaluation_run_record
 from src.metrics import EmbeddingBundle, build_metric
+from src.metrics.turning import physical_turning_score
 from src.models.checkpoint import load_model_checkpoint
 from src.modules.encoders.hybrid import imu_sequence_features, raw_pose_sequence, skeleton_tokens
 
@@ -85,17 +86,21 @@ def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> Embedding
         imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
 
     imu_sensor = T.IMU_SENSOR.strip() if T.IMU_SENSOR else None
-    dataset = WindowAlignmentDataset(
-        P.TEST_CSV,
-        root_dir=P.DATA_ROOT,
-        imu_mean=imu_mean,
-        imu_std=imu_std,
-        imu_sensor=imu_sensor,
-        repeat_single_sensor=T.REPEAT_SINGLE_SENSOR,
-        imu_lowpass_cutoff_hz=IMU_PRE.LOWPASS_CUTOFF_HZ,
-        imu_lowpass_fs_hz=IMU_PRE.LOWPASS_FS_HZ,
-        return_root_trajectory=False,
-        root_source="auto",
+    dataset = (
+        build_orientation_dataset(cfg, "test")
+        if model.capabilities.requires_orientation
+        else WindowAlignmentDataset(
+            P.TEST_CSV,
+            root_dir=P.DATA_ROOT,
+            imu_mean=imu_mean,
+            imu_std=imu_std,
+            imu_sensor=imu_sensor,
+            repeat_single_sensor=T.REPEAT_SINGLE_SENSOR,
+            imu_lowpass_cutoff_hz=IMU_PRE.LOWPASS_CUTOFF_HZ,
+            imu_lowpass_fs_hz=IMU_PRE.LOWPASS_FS_HZ,
+            return_root_trajectory=False,
+            root_source="auto",
+        )
     )
     loader = DataLoader(
         dataset,
@@ -107,24 +112,43 @@ def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> Embedding
 
     imu_all: List[np.ndarray] = []
     video_all: List[np.ndarray] = []
+    orientation_all: List[np.ndarray] = []
+    imu_sequence_all: List[np.ndarray] = []
     with torch.no_grad():
         for batch in loader:
             forward_kwargs = {
                 "imu": batch["imu"].to(device),
                 "skeleton": batch["skeleton"].to(device),
             }
+            if model.capabilities.requires_orientation:
+                forward_kwargs["orientation"] = batch["orientation"].to(device)
             if "root_trajectory" in batch:
                 forward_kwargs["root_trajectory"] = batch["root_trajectory"].to(device)
             out = model(**forward_kwargs)
             imu_all.append(F.normalize(out["imu"], dim=-1).detach().cpu().numpy())
             video_all.append(F.normalize(out["video"], dim=-1).detach().cpu().numpy())
+            if model.capabilities.requires_orientation:
+                orientation_all.append(batch["orientation"].detach().cpu().numpy())
+                imu_sequence_all.append(batch["imu"].detach().cpu().numpy())
 
-    rows = read_csv_rows(P.TEST_CSV)
+    if model.capabilities.requires_orientation:
+        rows = [
+            {key: str(value) for key, value in row.items() if not str(key).startswith("_")}
+            for row in dataset.rows
+        ]
+    else:
+        rows = read_csv_rows(P.TEST_CSV)
     imu = np.concatenate(imu_all, axis=0)
     video = np.concatenate(video_all, axis=0)
     if len(rows) != len(imu):
         raise ValueError(f"CSV rows and embeddings mismatch: rows={len(rows)}, embeddings={len(imu)}")
-    return EmbeddingBundle(rows=rows, imu=imu, video=video)
+    return EmbeddingBundle(
+        rows=rows,
+        imu=imu,
+        video=video,
+        orientation=np.concatenate(orientation_all, axis=0) if orientation_all else None,
+        imu_sequences=np.concatenate(imu_sequence_all, axis=0) if imu_sequence_all else None,
+    )
 
 
 def _resolve_path(path: str | Path, base: Path | None = None) -> Path:
@@ -494,6 +518,86 @@ def evaluation_console_summary(output: Dict[str, object]) -> Dict[str, object]:
     return summary
 
 
+def evaluate_turning_moe(bundle: EmbeddingBundle, cfg) -> Dict[str, object]:
+    """Evaluate the deterministic physical expert on orientation windows."""
+    turning_cfg = cfg.TEST.METRICS.TURNING_MOE
+    if bundle.orientation is None or bundle.imu_sequences is None:
+        raise ValueError("Turning MoE requires an orientation-aware embedding bundle")
+    groups: dict[tuple[str, str, int, int], list[int]] = {}
+    for index, row in enumerate(bundle.rows):
+        key = (
+            str(row.get("session") or row.get("source_sequence") or ""),
+            str(row.get("candidate_group_id") or row.get("npz_path") or ""),
+            int(row.get("window_start", 0)),
+            int(row.get("window_end", 0)),
+        )
+        groups.setdefault(key, []).append(index)
+    result = {
+        name: {"correct": 0, "total": 0}
+        for name in ("baseline", "physical_only", "turning_moe", "turning_moe_persistent")
+    }
+    starts = {
+        key: min(int(bundle.rows[index].get("window_start", 0)) for index in indices)
+        for key, indices in groups.items()
+    }
+    high_keys = {
+        key
+        for key, indices in groups.items()
+        if len(indices) >= 2
+        and int(sum(round(float(bundle.orientation[index, :, 4].sum())) for index in indices))
+        >= int(round(float(turning_cfg.THRESHOLD) * 48.0))
+    }
+    high_groups = 0
+    for key, indices in groups.items():
+        if len(indices) < 2:
+            continue
+        turning_count = int(sum(round(float(bundle.orientation[index, :, 4].sum())) for index in indices))
+        is_high = turning_count >= int(round(float(turning_cfg.THRESHOLD) * 48.0))
+        high_groups += int(is_high)
+        persistent_high = is_high and (
+            not bool(turning_cfg.PERSISTENCE_ENABLED)
+            or any(
+            other != key
+            and str(other[0]) == str(key[0])
+            and abs(starts[key] - starts[other]) <= int(turning_cfg.PERSISTENCE_MAX_GAP_FRAMES)
+            for other in high_keys
+            )
+        )
+        baseline = bundle.video[indices] @ bundle.imu[indices].T
+        physical = np.asarray(
+            [
+                [
+                    physical_turning_score(
+                        bundle.orientation[left],
+                        bundle.imu_sequences[right],
+                        max_lag=int(turning_cfg.MAX_LAG),
+                    )
+                    for right in indices
+                ]
+                for left in indices
+            ],
+            dtype=np.float32,
+        )
+        matrices = {
+            "baseline": baseline,
+            "physical_only": physical,
+            "turning_moe": physical if is_high else baseline,
+            "turning_moe_persistent": physical if persistent_high else baseline,
+        }
+        for name, matrix in matrices.items():
+            result[name]["correct"] += int(sum(int(np.argmax(matrix[row]) == offset) for offset, row in enumerate(range(len(indices)))))
+            result[name]["total"] += len(indices)
+    for record in result.values():
+        record["accuracy"] = record["correct"] / record["total"] if record["total"] else None
+    return {
+        "threshold": float(turning_cfg.THRESHOLD),
+        "max_lag": int(turning_cfg.MAX_LAG),
+        "high_groups": int(high_groups),
+        "persistence_enabled": bool(turning_cfg.PERSISTENCE_ENABLED),
+        "metrics": result,
+    }
+
+
 def main() -> None:
     cli_args = parse_args()
     cfg = load_cfg(cli_args.config)
@@ -523,7 +627,12 @@ def main() -> None:
             f"Unsupported TEST.METRICS.FRAME_ACC.MODE={frame_cfg.MODE!r}; "
             "use 'window', 'segment', 'full_session', or 'auto'."
         )
-    needs_window_bundle = (bool(frame_cfg.ENABLED) and frame_mode == "window") or bool(group_cfg.ENABLED)
+    turning_cfg = cfg.TEST.METRICS.TURNING_MOE
+    needs_window_bundle = (
+        (bool(frame_cfg.ENABLED) and frame_mode == "window")
+        or bool(group_cfg.ENABLED)
+        or bool(turning_cfg.ENABLED)
+    )
     bundle = compute_embeddings(cfg, checkpoint, device) if needs_window_bundle else None
 
     output: Dict[str, object] = {
@@ -564,6 +673,9 @@ def main() -> None:
             shuffle_match=bool(group_cfg.SHUFFLE_MATCH),
             per_subject_split=bool(group_cfg.PER_SUBJECT_SPLIT),
         ).evaluate(bundle)
+    if bool(turning_cfg.ENABLED):
+        assert bundle is not None
+        output["evaluations"]["turning_moe"] = evaluate_turning_moe(bundle, cfg)
 
     if save_json:
         out = Path(save_json)

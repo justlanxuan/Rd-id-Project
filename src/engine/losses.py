@@ -26,6 +26,51 @@ def retrieval_top1(
     return float((0.5 * (acc_ab + acc_ba)).item())
 
 
+def weighted_info_nce(
+    z_imu: torch.Tensor,
+    z_video: torch.Tensor,
+    sample_weight: torch.Tensor,
+    temperature: float,
+) -> tuple[torch.Tensor, float]:
+    """Symmetric InfoNCE with an auditable per-window weight."""
+    if z_imu.shape != z_video.shape or z_imu.ndim != 2:
+        raise ValueError("weighted_info_nce expects matching [batch, embedding] tensors")
+    if float(temperature) <= 0.0:
+        raise ValueError("temperature must be positive")
+    logits = F.normalize(z_imu, dim=-1, eps=1e-6) @ F.normalize(z_video, dim=-1, eps=1e-6).T / float(temperature)
+    labels = torch.arange(logits.shape[0], device=logits.device)
+    weight = sample_weight.to(logits).flatten().clamp_min(0.0)
+    if weight.shape[0] != logits.shape[0]:
+        raise ValueError("sample_weight length must match batch")
+    weight = weight / weight.mean().clamp_min(1e-6)
+    loss = 0.5 * (
+        (F.cross_entropy(logits, labels, reduction="none") * weight).mean()
+        + (F.cross_entropy(logits.T, labels, reduction="none") * weight).mean()
+    )
+    accuracy = float((logits.argmax(dim=1) == labels).float().mean().item())
+    return loss, accuracy
+
+
+def turning_alignment_loss(prediction: torch.Tensor, imu: torch.Tensor) -> torch.Tensor:
+    """Align predicted turning activity with gyro magnitude without labels."""
+    gyro_magnitude = torch.linalg.vector_norm(imu[:, :, 3:6], dim=-1).mean(dim=1)
+    target = (gyro_magnitude - gyro_magnitude.mean()) / gyro_magnitude.std().clamp_min(1e-4)
+    pred = (prediction - prediction.mean()) / prediction.std().clamp_min(1e-4)
+    return F.smooth_l1_loss(pred, target)
+
+
+def turning_onset_loss(output: dict[str, torch.Tensor], orientation: torch.Tensor) -> torch.Tensor:
+    """Match skeleton-derived and gyro-specific onset heads."""
+    if "gyro_onset_logits" not in output or "orientation_onset_logits" not in output:
+        return orientation.new_zeros(())
+    bins = output["orientation_onset_logits"].shape[-1]
+    target = F.adaptive_avg_pool1d(orientation[:, :, 4].unsqueeze(1), bins).squeeze(1)
+    return 0.5 * (
+        F.binary_cross_entropy_with_logits(output["orientation_onset_logits"], target)
+        + F.binary_cross_entropy_with_logits(output["gyro_onset_logits"], target)
+    )
+
+
 def _loss_temperature(loss_fn) -> torch.Tensor:
     if hasattr(loss_fn, "log_temperature"):
         return torch.exp(loss_fn.log_temperature).clamp(0.02, 0.5)
