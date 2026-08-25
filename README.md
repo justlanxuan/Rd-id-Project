@@ -216,7 +216,7 @@ subprocess environment and emits the repository's H36M-17 schema; it does not
 modify `sys.path` or import from an unrelated local project at runtime.  The
 Custom SOTA protocol and reproducible three-train/one-test LOSO commands are
 documented in
-[`experiments/H4WPP:custom_loso3train/final_report.md`](experiments/H4WPP:custom_loso3train/final_report.md).
+[`experiments/G13:H4WPP/`](experiments/G13:H4WPP/).
 
 After the Custom prepared cache has been generated, the recorded SOTA can be
 reproduced with one repository command:

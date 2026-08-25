@@ -1,8 +1,8 @@
-# H4W++ Custom 三训练 session四折结果
+# G13 E1：H4W++ 稀疏推理 Custom 三训练 session四折结果
 
 ## 结论
 
-在每折使用三个 session 训练、剩余 session 测试的严格 LOSO 协议下，H4W++ skeleton + Hybrid IMU–skeleton 模型取得 `80.89%` 的 FrameAcc 宏平均，所有测试窗口加权结果为 `80.24%`。四个测试 session 均为双候选组，随机基线为 `50%`。
+在每折使用三个 session 训练、剩余 session 测试的严格 LOSO 协议下，H4W++ skeleton + Hybrid IMU–skeleton 模型取得 `80.89%` 的 FrameAcc 宏平均，所有测试窗口加权结果为 `80.24%`。本实验每 16 个原始视频帧运行一次 H4W++，中间帧前向填充；四个测试 session 均为双候选组，随机基线为 `50%`。
 
 ## FrameAcc
 
@@ -26,7 +26,7 @@
 ## 可复现文件
 
 - 协议：`protocol-lock.md`
-- 配置：`../../configs/custom_h4wpp_loso_*.yaml`
+- 配置：`../../../configs/custom_h4wpp_loso_*.yaml`
 - checkpoint：`/data/fzliang/reid-project/custom/artifacts/train/h4wpp_loso3train/`
 - 完整评估：`/data/fzliang/reid-project/custom/artifacts/evaluate/h4wpp_loso3train/`
 

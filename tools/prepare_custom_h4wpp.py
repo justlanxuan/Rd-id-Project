@@ -129,6 +129,7 @@ def prepare(args) -> Path:
     raw = Path(args.raw_root).resolve()
     tracks_root = Path(args.tracks_root).resolve()
     out = Path(args.output).resolve()
+    extract_out = Path(args.extract_root).resolve() if args.extract_root else out
     seq_dir = out / "sequences"
     seq_dir.mkdir(parents=True, exist_ok=True)
     sessions = sorted(p.name for p in raw.iterdir() if (p / "video").is_dir() and (p / "imu").is_dir())
@@ -153,7 +154,7 @@ def prepare(args) -> Path:
                 raise ValueError(f"IMU interpolation failed: {path}")
             imu_list.append(aligned)
         imu = np.stack(imu_list, axis=1).astype(np.float32)
-        h4w_path = _extract(args, session, video, tracks, out)
+        h4w_path = _extract(args, session, video, tracks, extract_out)
         detections, _ = _load_h4w(h4w_path, len(timestamps))
         skeleton = np.zeros((len(timestamps), 2, 17, 3), dtype=np.float32)
         extract_boxes = np.zeros((len(timestamps), 2, 4), dtype=np.float32)
@@ -221,6 +222,7 @@ def prepare(args) -> Path:
         "train_sessions": args.train_sessions,
         "val_sessions": args.val_sessions,
         "test_sessions": args.test_sessions,
+        "multi_person": True,
         "skeleton_source": "vicon",
         "skeleton_normalize": args.skeleton_normalize,
     }
@@ -241,6 +243,10 @@ def main():
     p.add_argument("--raw-root", required=True)
     p.add_argument("--tracks-root", required=True)
     p.add_argument("--output", required=True)
+    p.add_argument(
+        "--extract-root",
+        help="Optional shared root for H4W++ skeleton JSON outputs; keeps extraction separate from fold-specific slices.",
+    )
     p.add_argument("--h4w-root", default=default_h4w_root)
     p.add_argument("--checkpoint", default=default_checkpoint)
     p.add_argument("--h4w-python", default=sys.executable)

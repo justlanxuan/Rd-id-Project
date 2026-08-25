@@ -10,9 +10,15 @@ session LOSO 协议下，当前 Custom session-matching SOTA 为：
 - 四个测试 session：`59.70% / 91.94% / 88.18% / 83.74%`
 - 2-way 随机基线：`50%`
 
-该结果已经获得人类授权记录为 SOTA，并绑定到本仓库的 clean release commit；完整
-协议、训练曲线、原始 predictions 和 SHA-256 manifest 见
-[`experiments/H4WPP:custom_loso3train/`](H4WPP:custom_loso3train/)。
+该结果现在归档为 HAROS `G13:H4WPP/E1` 稀疏推理基线；完整协议、训练曲线、原始
+predictions 和 SHA-256 manifest 见
+[`experiments/G13:H4WPP/`](G13:H4WPP/)。G13 E2 将使用全帧推理检验稀疏推理是否是
+主要收益来源。
+
+G13 E2 已完成全帧对照：FrameAcc 宏平均 `73.79%`、加权总体 `72.91%`，相对 E1
+分别下降 `7.10` 和 `7.33` 个百分点。因此当前 SOTA 仍为 E1；E2 的结果支持将
+“稀疏推理/前向填充”作为独立性能来源记录，而不能把 E1 的全部收益归因于 3-D
+skeleton 表征。
 
 模型选择不使用测试 session 或独立验证 session，20 epochs 后按训练集
 `train_top1` 保存 best checkpoint。该选择契约与有验证集的历史四折结果不同，必须
@@ -40,7 +46,9 @@ session LOSO 协议下，当前 Custom session-matching SOTA 为：
 
 - `git clone --recurse-submodules` 后执行 `python tools/setup_h4wpp.py --install`；
 - 通过 `python tools/setup_h4wpp.py --check` 验证模型资产；
-- 使用 `configs/custom_h4wpp_loso_*.yaml` 顺序执行 `preprocess,train,test`；
+- 使用 `configs/custom_h4wpp_loso_*.yaml` 和
+  `configs/custom_h4wpp_fullframe_loso_*.yaml` 执行 E1/E2 的
+  `preprocess,train,test`；
 - 用 `artifact-manifest.json` 复核 config、CSV、checkpoint 和 raw prediction hash；
 - 外部 SMPL/FLAME/MANO 和 H4W++ checkpoint 必须由用户按上游许可证提供，不能从
   Git 历史猜测或替换成空文件。

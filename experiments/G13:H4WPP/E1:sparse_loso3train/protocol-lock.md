@@ -1,4 +1,4 @@
-# H4W++ Custom 三训练 session / 一测试 session协议
+# G13 E1：H4W++ 稀疏推理 / 三训练 session 一测试 session
 
 ## 目的
 
@@ -18,6 +18,7 @@
 
 - 不设置独立验证 session；训练配置显式使用 `best_metric: train_top1`，避免把测试 session 或额外 session 用于模型选择。
 - 窗口长度/步长：`24/16`。
+- H4W++ 推理帧步长：`16`；prepared cache 对未推理的中间视频帧做前向填充。
 - H4W++ skeleton：root-relative 3-D H36M-17，`skeleton_normalize: true`。
 - IMU：按 `imu_person_mapping.json` 的 canonical person 顺序配对，`multi_person: true`，每个测试窗口保留 2 个候选。
 - 训练：Hybrid model，20 epochs，batch size 64，seed 42，训练集 IMU stats。
