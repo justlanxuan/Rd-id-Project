@@ -11,7 +11,14 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.datasets import WindowAlignmentDataset, lowpass_filter_fft
-from src.modules.encoders.hybrid import imu_sequence_features, raw_pose_sequence, skeleton_tokens
+from src.modules.encoders.hybrid import (
+    H36M_FEATURE_MODES,
+    h36m_feature_sequence,
+    h36m_motion_sequence,
+    imu_sequence_features,
+    raw_pose_sequence,
+    skeleton_tokens,
+)
 
 
 def read_csv_rows(csv_path: str) -> list[dict[str, str]]:
@@ -87,14 +94,23 @@ def fit_hybrid_encoder_stats(model: torch.nn.Module, dataset: WindowAlignmentDat
     imu_encoder = getattr(model, "imu_encoder", None)
     if video_encoder is None or imu_encoder is None:
         return
-    if not all(hasattr(video_encoder, k) for k in ("raw_mu", "raw_sd", "vec_mu", "vec_sd")):
-        return
     if not all(hasattr(imu_encoder, k) for k in ("imu_mu", "imu_sd")):
+        return
+    feature_mode = str(getattr(video_encoder, "feature_mode", "hybrid"))
+    h36m_mode = feature_mode in H36M_FEATURE_MODES
+    if h36m_mode:
+        if not all(hasattr(video_encoder, key) for key in ("h36m_mu", "h36m_sd")):
+            return
+    elif not all(
+        hasattr(video_encoder, key)
+        for key in ("raw_mu", "raw_sd", "vec_mu", "vec_sd")
+    ):
         return
 
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     raw_parts = []
     vec_parts = []
+    h36m_parts = []
     imu_parts = []
     skel_smooth = int(getattr(video_encoder, "skeleton_smooth_kernel", 9))
     image_height = float(getattr(video_encoder, "image_height", 1080.0))
@@ -106,21 +122,41 @@ def fit_hybrid_encoder_stats(model: torch.nn.Module, dataset: WindowAlignmentDat
         for batch in loader:
             skel = batch["skeleton"].float()
             imu = batch["imu"].float()
-            raw_parts.append(raw_pose_sequence(skel, skel_smooth, image_height, image_width))
-            vec_parts.append(skeleton_tokens(skel, skel_smooth, image_height, image_width))
+            if h36m_mode:
+                if feature_mode in {"h36m3d", "h36m2d"}:
+                    features = h36m_motion_sequence(
+                        skel,
+                        skel_smooth,
+                        include_depth=feature_mode == "h36m3d",
+                    )
+                else:
+                    features = h36m_feature_sequence(skel, skel_smooth, feature_mode)
+                h36m_parts.append(features)
+            else:
+                raw_parts.append(
+                    raw_pose_sequence(skel, skel_smooth, image_height, image_width)
+                )
+                vec_parts.append(
+                    skeleton_tokens(skel, skel_smooth, image_height, image_width)
+                )
             imu_parts.append(imu_sequence_features(imu, imu_smooth, imu_feature_mode))
 
-    raw = torch.cat(raw_parts, dim=0)
-    vec = torch.cat(vec_parts, dim=0)
     imu = torch.cat(imu_parts, dim=0)
-    raw_mu, raw_sd = _fit_tensor_stats(raw, (0, 1))
-    vec_mu, vec_sd = _fit_tensor_stats(vec, (0, 1, 2))
     imu_mu, imu_sd = _fit_tensor_stats(imu, (0, 1))
-
-    video_encoder.raw_mu.copy_(raw_mu.to(video_encoder.raw_mu.device))
-    video_encoder.raw_sd.copy_(raw_sd.to(video_encoder.raw_sd.device))
-    video_encoder.vec_mu.copy_(vec_mu.to(video_encoder.vec_mu.device))
-    video_encoder.vec_sd.copy_(vec_sd.to(video_encoder.vec_sd.device))
+    if h36m_mode:
+        h36m = torch.cat(h36m_parts, dim=0)
+        h36m_mu, h36m_sd = _fit_tensor_stats(h36m, (0, 1))
+        video_encoder.h36m_mu.copy_(h36m_mu.to(video_encoder.h36m_mu.device))
+        video_encoder.h36m_sd.copy_(h36m_sd.to(video_encoder.h36m_sd.device))
+    else:
+        raw = torch.cat(raw_parts, dim=0)
+        vec = torch.cat(vec_parts, dim=0)
+        raw_mu, raw_sd = _fit_tensor_stats(raw, (0, 1))
+        vec_mu, vec_sd = _fit_tensor_stats(vec, (0, 1, 2))
+        video_encoder.raw_mu.copy_(raw_mu.to(video_encoder.raw_mu.device))
+        video_encoder.raw_sd.copy_(raw_sd.to(video_encoder.raw_sd.device))
+        video_encoder.vec_mu.copy_(vec_mu.to(video_encoder.vec_mu.device))
+        video_encoder.vec_sd.copy_(vec_sd.to(video_encoder.vec_sd.device))
     imu_encoder.imu_mu.copy_(imu_mu.to(imu_encoder.imu_mu.device))
     imu_encoder.imu_sd.copy_(imu_sd.to(imu_encoder.imu_sd.device))
     print("[INFO] Fitted hybrid encoder stats on train split.")

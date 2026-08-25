@@ -22,6 +22,26 @@ RIGHT_HIP = 12
 RAW_POSE_DIM = 72
 SKELETON_TOKEN_DIM = 12
 SKELETON_N_TOKENS = 4
+H36M_MOTION_DIM = 17 * 3 * 2
+H36M_HIP = 0
+H36M_LEFT_SHOULDER = 11
+H36M_RIGHT_SHOULDER = 14
+H36M_PARENTS = (-1, 0, 1, 2, 0, 4, 5, 0, 7, 8, 9, 8, 11, 12, 8, 14, 15)
+H36M_FEATURE_MODES = (
+    "h36m2d",
+    "h36m3d",
+    "h36m3d_no_velocity",
+    "h36m3d_bone",
+    "h36m3d_heading",
+    "h36m3d_heading_rate",
+    "h36m3d_rotinv",
+    "h36m3d_zonly",
+    "h36m3d_geom",
+    "h36m3d_left_wrist",
+    "h36m3d_right_wrist",
+    "h36m3d_both_wrist",
+    "h36m3d_left_wrist_rot",
+)
 
 
 def _moving_average(x: torch.Tensor, kernel: int) -> torch.Tensor:
@@ -181,6 +201,199 @@ def raw_pose_sequence(
     if out.shape[-1] != RAW_POSE_DIM:
         raise ValueError(f"Unexpected raw pose dim {out.shape}")
     return out.float()
+
+
+def h36m_motion_sequence(
+    pose: torch.Tensor,
+    smooth_kernel: int = 9,
+    *,
+    include_depth: bool = True,
+) -> torch.Tensor:
+    """Build scale-normalized H36M-17 positions and velocities.
+
+    ``h36m3d`` and ``h36m2d`` deliberately share this 102-D contract and the
+    same temporal tower.  The 2-D control only zeros depth before centering;
+    this keeps architecture/capacity fixed while testing the 3-D coordinate.
+    """
+    if pose.ndim != 4 or pose.shape[-2:] != (17, 3):
+        raise ValueError(f"Expected H36M skeleton [B,T,17,3], got {tuple(pose.shape)}")
+    xyz = pose.double()
+    if not include_depth:
+        xyz = xyz.clone()
+        xyz[..., 2] = 0.0
+    xyz = xyz - xyz[:, :, H36M_HIP : H36M_HIP + 1]
+    shoulder_axis = (
+        xyz[:, :, H36M_RIGHT_SHOULDER] - xyz[:, :, H36M_LEFT_SHOULDER]
+    )
+    scale = _norm(shoulder_axis).clamp_min(1e-4)
+    xyz = xyz / scale[:, :, None, None]
+    xyz = _moving_average(xyz, smooth_kernel)
+    velocity = _diff_same(xyz, 1)
+    output = torch.cat(
+        [xyz.reshape(*xyz.shape[:2], -1), velocity.reshape(*velocity.shape[:2], -1)],
+        dim=-1,
+    )
+    if output.shape[-1] != H36M_MOTION_DIM:
+        raise ValueError(f"Unexpected H36M motion feature shape {tuple(output.shape)}")
+    if not torch.isfinite(output).all():
+        raise ValueError("H36M motion features contain non-finite values")
+    return output.float()
+
+
+def h36m_feature_dim(feature_mode: str) -> int:
+    """Return the fixed input width for a profiled H36M feature family."""
+    mode = str(feature_mode).lower()
+    if mode in {"h36m2d", "h36m3d", "h36m3d_no_velocity", "h36m3d_bone", "h36m3d_rotinv", "h36m3d_zonly"}:
+        return H36M_MOTION_DIM
+    if mode == "h36m3d_heading_rate":
+        return H36M_MOTION_DIM + 2
+    if mode == "h36m3d_heading":
+        return H36M_MOTION_DIM + 4
+    if mode == "h36m3d_geom":
+        return H36M_MOTION_DIM + 17
+    if mode in {"h36m3d_left_wrist", "h36m3d_right_wrist", "h36m3d_left_wrist_rot"}:
+        return H36M_MOTION_DIM + 6
+    if mode == "h36m3d_both_wrist":
+        return H36M_MOTION_DIM + 12
+    raise ValueError(f"Unsupported H36M feature mode={feature_mode!r}")
+
+
+def _h36m_normalized_xyz(
+    pose: torch.Tensor,
+    smooth_kernel: int,
+    *,
+    include_depth: bool,
+) -> torch.Tensor:
+    if pose.ndim != 4 or pose.shape[-2:] != (17, 3):
+        raise ValueError(f"Expected H36M skeleton [B,T,17,3], got {tuple(pose.shape)}")
+    xyz = pose.double()
+    if not include_depth:
+        xyz = xyz.clone()
+        xyz[..., 2] = 0.0
+    xyz = xyz - xyz[:, :, H36M_HIP : H36M_HIP + 1]
+    shoulder_axis = xyz[:, :, H36M_RIGHT_SHOULDER] - xyz[:, :, H36M_LEFT_SHOULDER]
+    scale = _norm(shoulder_axis).clamp_min(1e-4)
+    xyz = xyz / scale[:, :, None, None]
+    return _moving_average(xyz, smooth_kernel)
+
+
+def _h36m_heading_features(xyz: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return periodic torso heading and a validity mask in the x/z plane."""
+    lateral = xyz[:, :, H36M_RIGHT_SHOULDER] - xyz[:, :, H36M_LEFT_SHOULDER]
+    up = xyz[:, :, 8] - xyz[:, :, H36M_HIP]
+    forward = torch.cross(lateral, up, dim=-1)
+    horizontal = forward[..., (0, 2)]
+    valid = _norm(horizontal) > 1e-5
+    heading = torch.atan2(horizontal[..., 1], horizontal[..., 0])
+    heading = torch.where(valid, heading, torch.zeros_like(heading))
+    unwrapped = _unwrap_time(heading)
+    rate = _diff_same(unwrapped.unsqueeze(-1), 1).squeeze(-1)
+    sin_cos = torch.stack([torch.sin(heading), torch.cos(heading)], dim=-1)
+    sin_cos = torch.where(valid.unsqueeze(-1), sin_cos, torch.zeros_like(sin_cos))
+    return torch.cat([sin_cos, rate.unsqueeze(-1)], dim=-1), valid.float().unsqueeze(-1)
+
+
+def _h36m_bone_vectors(xyz: torch.Tensor) -> torch.Tensor:
+    vectors = torch.zeros_like(xyz)
+    for joint, parent in enumerate(H36M_PARENTS):
+        if parent >= 0:
+            vectors[:, :, joint] = xyz[:, :, joint] - xyz[:, :, parent]
+    return vectors
+
+
+def _h36m_wrist_features(xyz: torch.Tensor, *, side: str, torso_relative: bool = False) -> torch.Tensor:
+    """Return a 6-D forearm direction/rotation proxy for one wrist.
+
+    H4W++'s current exported cache contains H36M-17 body joints, not MANO
+    finger joints.  This therefore measures 3-D forearm/wrist direction and
+    frame-to-frame rotation, not a full wrist-local hand pose.
+    """
+    if side == "left":
+        elbow, wrist = 12, 13
+    elif side == "right":
+        elbow, wrist = 15, 16
+    else:
+        raise ValueError(f"Unsupported wrist side={side!r}")
+    vector = xyz[:, :, wrist] - xyz[:, :, elbow]
+    direction = _unit(vector)
+    if torso_relative:
+        lateral = _unit(xyz[:, :, H36M_RIGHT_SHOULDER] - xyz[:, :, H36M_LEFT_SHOULDER])
+        up = _unit(xyz[:, :, 8] - xyz[:, :, H36M_HIP])
+        forward = _unit(torch.cross(lateral, up, dim=-1))
+        direction = torch.stack(
+            [
+                (direction * lateral).sum(dim=-1),
+                (direction * up).sum(dim=-1),
+                (direction * forward).sum(dim=-1),
+            ],
+            dim=-1,
+        )
+    previous = torch.cat([direction[:, :1], direction[:, :-1]], dim=1)
+    rotation = torch.cross(previous, direction, dim=-1)
+    return torch.cat([direction, rotation], dim=-1)
+
+
+def h36m_feature_sequence(
+    pose: torch.Tensor,
+    smooth_kernel: int = 9,
+    feature_mode: str = "h36m3d",
+) -> torch.Tensor:
+    """Build one controlled 3-D skeleton feature family for G13 profiling.
+
+    All position/velocity families use the same H36M-17 layout, pelvis origin,
+    shoulder-width scale and temporal smoothing.  ``h36m2d`` zeros depth before
+    feature construction; the remaining modes isolate velocity, bone vectors,
+    global heading, heading rate, heading removal and static geometry.
+    """
+    mode = str(feature_mode).lower()
+    xyz = _h36m_normalized_xyz(
+        pose,
+        smooth_kernel,
+        include_depth=mode != "h36m2d",
+    )
+    if mode == "h36m3d_zonly":
+        xyz = xyz.clone()
+        xyz[..., :2] = 0.0
+    if mode == "h36m3d_rotinv":
+        heading, valid = _h36m_heading_features(xyz)
+        angle = torch.atan2(heading[..., 0], heading[..., 1])
+        c, s = torch.cos(angle), torch.sin(angle)
+        x, z = xyz[..., 0].clone(), xyz[..., 2].clone()
+        xyz = xyz.clone()
+        xyz[..., 0] = c.unsqueeze(-1) * x + s.unsqueeze(-1) * z
+        xyz[..., 2] = -s.unsqueeze(-1) * x + c.unsqueeze(-1) * z
+        xyz = torch.where(valid.unsqueeze(-1).bool(), xyz, _h36m_normalized_xyz(pose, smooth_kernel, include_depth=True))
+    if mode == "h36m3d_bone":
+        xyz = _h36m_bone_vectors(xyz)
+    velocity = _diff_same(xyz, 1)
+    if mode == "h36m3d_no_velocity":
+        velocity = torch.zeros_like(velocity)
+    output = [xyz.reshape(*xyz.shape[:2], -1), velocity.reshape(*velocity.shape[:2], -1)]
+    if mode == "h36m3d_heading":
+        heading, valid = _h36m_heading_features(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True))
+        output.append(torch.cat([heading, valid], dim=-1))
+    elif mode == "h36m3d_heading_rate":
+        heading, valid = _h36m_heading_features(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True))
+        output.append(torch.cat([heading[..., 2:3], valid], dim=-1))
+    elif mode == "h36m3d_geom":
+        bones = _h36m_bone_vectors(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True))
+        output.append(_norm(bones, dim=-1))
+    elif mode == "h36m3d_left_wrist":
+        output.append(_h36m_wrist_features(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True), side="left"))
+    elif mode == "h36m3d_right_wrist":
+        output.append(_h36m_wrist_features(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True), side="right"))
+    elif mode == "h36m3d_both_wrist":
+        base = _h36m_normalized_xyz(pose, smooth_kernel, include_depth=True)
+        output.append(torch.cat([_h36m_wrist_features(base, side="left"), _h36m_wrist_features(base, side="right")], dim=-1))
+    elif mode == "h36m3d_left_wrist_rot":
+        output.append(_h36m_wrist_features(_h36m_normalized_xyz(pose, smooth_kernel, include_depth=True), side="left", torso_relative=True))
+    result = torch.cat(output, dim=-1)
+    expected = h36m_feature_dim(mode)
+    if result.shape[-1] != expected:
+        raise ValueError(f"Unexpected H36M feature shape {tuple(result.shape)} for {mode}; expected={expected}")
+    if not torch.isfinite(result).all():
+        raise ValueError(f"H36M features contain non-finite values for mode={mode}")
+    return result.float()
 
 
 def raw_imu_sequence(imu: torch.Tensor, smooth_kernel: int = 5) -> torch.Tensor:
@@ -373,37 +586,87 @@ class HybridSkeletonEncoder(nn.Module):
         self.image_height = image_height
         self.image_width = image_width
         self.feature_mode = str(feature_mode).lower()
-        if self.feature_mode not in {"hybrid", "raw", "vector", "hybrid_zero_raw", "hybrid_zero_vector"}:
+        if self.feature_mode not in {
+            "hybrid",
+            "raw",
+            "vector",
+            "hybrid_zero_raw",
+            "hybrid_zero_vector",
+            *H36M_FEATURE_MODES,
+        }:
             raise ValueError(f"Unsupported skeleton feature_mode={feature_mode!r}")
-        self.register_buffer("raw_mu", torch.zeros(1, 1, RAW_POSE_DIM), persistent=True)
-        self.register_buffer("raw_sd", torch.ones(1, 1, RAW_POSE_DIM), persistent=True)
-        self.register_buffer("vec_mu", torch.zeros(1, 1, 1, SKELETON_TOKEN_DIM), persistent=True)
-        self.register_buffer("vec_sd", torch.ones(1, 1, 1, SKELETON_TOKEN_DIM), persistent=True)
-        self.raw = RawTower(
-            RAW_POSE_DIM,
-            hidden_size,
-            temporal_layers=temporal_layers,
-            kernel_size=temporal_kernel,
-            dropout=dropout,
-            temporal_mode=temporal_mode,
-        )
-        self.vec = VectorTower(
-            hidden_size,
-            temporal_layers=temporal_layers,
-            kernel_size=temporal_kernel,
-            token_layers=token_layers,
-            token_heads=token_heads,
-            dropout=dropout,
-            temporal_mode=temporal_mode,
-        )
-        self.fuse = nn.Sequential(
-            nn.Linear(hidden_size * 2, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, hidden_size),
-        )
+        if self.feature_mode in H36M_FEATURE_MODES:
+            h36m_dim = h36m_feature_dim(self.feature_mode)
+            self.register_buffer(
+                "h36m_mu", torch.zeros(1, 1, h36m_dim), persistent=True
+            )
+            self.register_buffer(
+                "h36m_sd", torch.ones(1, 1, h36m_dim), persistent=True
+            )
+            self.h36m = RawTower(
+                h36m_dim,
+                hidden_size,
+                temporal_layers=temporal_layers,
+                kernel_size=temporal_kernel,
+                dropout=dropout,
+                temporal_mode=temporal_mode,
+            )
+            self.raw = None
+            self.vec = None
+            self.fuse = None
+        else:
+            self.register_buffer(
+                "raw_mu", torch.zeros(1, 1, RAW_POSE_DIM), persistent=True
+            )
+            self.register_buffer(
+                "raw_sd", torch.ones(1, 1, RAW_POSE_DIM), persistent=True
+            )
+            self.register_buffer(
+                "vec_mu",
+                torch.zeros(1, 1, 1, SKELETON_TOKEN_DIM),
+                persistent=True,
+            )
+            self.register_buffer(
+                "vec_sd",
+                torch.ones(1, 1, 1, SKELETON_TOKEN_DIM),
+                persistent=True,
+            )
+            self.raw = RawTower(
+                RAW_POSE_DIM,
+                hidden_size,
+                temporal_layers=temporal_layers,
+                kernel_size=temporal_kernel,
+                dropout=dropout,
+                temporal_mode=temporal_mode,
+            )
+            self.vec = VectorTower(
+                hidden_size,
+                temporal_layers=temporal_layers,
+                kernel_size=temporal_kernel,
+                token_layers=token_layers,
+                token_heads=token_heads,
+                dropout=dropout,
+                temporal_mode=temporal_mode,
+            )
+            self.fuse = nn.Sequential(
+                nn.Linear(hidden_size * 2, hidden_size),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_size, hidden_size),
+            )
+            self.h36m = None
 
     def forward(self, skeleton: torch.Tensor) -> torch.Tensor:
+        if self.feature_mode in H36M_FEATURE_MODES:
+            assert self.h36m is not None
+            features = h36m_motion_sequence(
+                skeleton, self.skeleton_smooth_kernel, include_depth=self.feature_mode == "h36m3d"
+            )
+            if self.feature_mode not in {"h36m3d", "h36m2d"}:
+                features = h36m_feature_sequence(skeleton, self.skeleton_smooth_kernel, self.feature_mode)
+            features = (features - self.h36m_mu) / self.h36m_sd.clamp_min(1e-6)
+            return F.normalize(self.h36m(features), dim=1)
+        assert self.raw is not None and self.vec is not None and self.fuse is not None
         raw = raw_pose_sequence(skeleton, self.skeleton_smooth_kernel, self.image_height, self.image_width)
         vec = skeleton_tokens(skeleton, self.skeleton_smooth_kernel, self.image_height, self.image_width)
         raw = (raw - self.raw_mu) / self.raw_sd.clamp_min(1e-6)
@@ -423,6 +686,19 @@ class HybridSkeletonEncoder(nn.Module):
         return F.normalize(h, dim=1)
 
     def forward_sequence(self, skeleton: torch.Tensor) -> torch.Tensor:
+        if self.feature_mode in H36M_FEATURE_MODES:
+            assert self.h36m is not None
+            if self.feature_mode in {"h36m3d", "h36m2d"}:
+                features = h36m_motion_sequence(
+                    skeleton,
+                    self.skeleton_smooth_kernel,
+                    include_depth=self.feature_mode == "h36m3d",
+                )
+            else:
+                features = h36m_feature_sequence(skeleton, self.skeleton_smooth_kernel, self.feature_mode)
+            features = (features - self.h36m_mu) / self.h36m_sd.clamp_min(1e-6)
+            return self.h36m.forward_sequence(features)
+        assert self.raw is not None and self.vec is not None and self.fuse is not None
         raw = raw_pose_sequence(skeleton, self.skeleton_smooth_kernel, self.image_height, self.image_width)
         vec = skeleton_tokens(skeleton, self.skeleton_smooth_kernel, self.image_height, self.image_width)
         raw = (raw - self.raw_mu) / self.raw_sd.clamp_min(1e-6)

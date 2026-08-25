@@ -19,6 +19,10 @@ IMU 配对、session 划分和评估指标一致，只改变 H4W++ 推理帧间�
   `1,2,4,8,12,16,24,32,48,64`，每个密度做 seeds `0/42/123` 的四折 LOSO，选择
   3-seed 平均最高的推理密度。已完成 120 runs；stride 1 最高，为
   `73.80% ± 0.41%`。
+- `E4:3d_feature_profiling`：固定 full-frame H4W++，扫描原有 2-D hybrid、H36M-17
+  3-D position/velocity、depth、bone、torso heading、heading rate、heading-invariant、
+  geometry 及左右腕/前臂旋转 proxy；14 个 feature 做 `0/42/123` 三 seed 四折，共
+  168 runs。`h36m3d_zonly` 最高，为 `80.55% ± 2.48%`，暂不超过 E1 单 seed SOTA。
 
 ## Decision rule
 

@@ -1,0 +1,45 @@
+{
+  "goal": "G13:H4WPP",
+  "experiment": "E4:3d_feature_profiling",
+  "protocol": {
+    "features": [
+      "hybrid",
+      "h36m2d",
+      "h36m3d",
+      "h36m3d_no_velocity",
+      "h36m3d_bone",
+      "h36m3d_heading",
+      "h36m3d_heading_rate",
+      "h36m3d_rotinv",
+      "h36m3d_zonly",
+      "h36m3d_geom",
+      "h36m3d_left_wrist",
+      "h36m3d_right_wrist",
+      "h36m3d_both_wrist",
+      "h36m3d_left_wrist_rot"
+    ],
+    "seeds": [0, 42, 123],
+    "folds_per_cell": 4,
+    "total_runs": 168,
+    "selection_metric": "three_seed_mean_of_four_fold_macro_frameacc"
+  },
+  "code": {
+    "runner_sha256": "9babfd9ef32bc62cd9523679506b4f4ae2723229560ce7a544f067645ff61fbb",
+    "hybrid_encoder_sha256": "177fe42dbae5cc073c0bbb6c0c82f17c8a5b99c5598e37b278a09fa18c027f3c",
+    "stats_sha256": "717add8866f5dd45a8fe59d889a674db2f9873dbd7365acade125ce84e8e40d0",
+    "protocol_lock_sha256": "f23b0f2acb8ec9c3fe7a5f1ef90386eb1e1e28301704719235425da8d45e7535"
+  },
+  "external_artifacts": {
+    "root": "/data/fzliang/reid-project/custom/artifacts/h4wpp_3d_feature_sweep",
+    "summary_sha256": "f8e2cc1795a14788156e5d9e87f76565c5d1202c6921bc2486bc97295dffaf84",
+    "seed_summary_sha256": "20f713e13726d8c79827dec0258762c4fa494549cb749a46fc31d6dcfc1aad8d",
+    "full_artifact_manifest_sha256": "4df5852b639cd037f129636878ea28f9a1ecd58a86332097fef722233a38ee46",
+    "result_files": 168
+  },
+  "result": {
+    "best_feature": "h36m3d_zonly",
+    "three_seed_macro_mean": 0.805545108423028,
+    "three_seed_macro_population_std": 0.024769648901974323,
+    "three_seed_weighted_mean": 0.8004073319755601
+  }
+}

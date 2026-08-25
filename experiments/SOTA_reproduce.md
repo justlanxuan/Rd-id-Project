@@ -25,6 +25,12 @@ G13 E3 进一步完成 10 个 inference strides、3 seeds、四折 LOSO 的 120-
 为 `72.84% ± 5.10%`。因此 `80.89%` 仍是 seed 42 的单次 SOTA，而稳健密度推荐为
 全帧 stride 1。详细结果见 `G13:H4WPP/E3:inference_density_sweep`。
 
+G13 E4 固定 full-frame H4W++，完成 14 个 2-D/3-D skeleton、深度、速度、bone、heading
+和 wrist proxy 特征的 168-run profiling。三 seed 四折宏平均最高的是 `h36m3d_zonly`：
+`80.55% ± 2.48%`，高于 2-D hybrid baseline 的 `73.80% ± 0.41%`，但仍略低于 E1
+seed 42 单次 `80.89%`，因此不登记为新的 SOTA。详细结果见
+`G13:H4WPP/E4:3d_feature_profiling`。
+
 模型选择不使用测试 session 或独立验证 session，20 epochs 后按训练集
 `train_top1` 保存 best checkpoint。该选择契约与有验证集的历史四折结果不同，必须
 按本节协议复现。
