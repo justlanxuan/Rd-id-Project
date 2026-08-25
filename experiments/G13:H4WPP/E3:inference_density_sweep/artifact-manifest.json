@@ -1,0 +1,30 @@
+{
+  "goal": "G13:H4WPP",
+  "experiment": "E3:inference_density_sweep",
+  "protocol": {
+    "inference_strides": [1, 2, 4, 8, 12, 16, 24, 32, 48, 64],
+    "seeds": [0, 42, 123],
+    "folds_per_cell": 4,
+    "total_runs": 120,
+    "selection_metric": "three_seed_mean_of_four_fold_macro_frameacc",
+    "protocol_lock_sha256": "08d1f0918b7c8f82f71b87dbe6215935271d2daa5aee2c6bf2440b51906ed030"
+  },
+  "code": {
+    "runner_sha256": "af4e6054ceac2e3945a3c15248f0cb6bd40c00ae40b942abda8a506b5d64f3f0",
+    "prepare_sha256": "5fc04406c6211caca66f91c0da27e7588f1acc6c183f9f4eccdec16063ba22b8"
+  },
+  "external_artifacts": {
+    "root": "/data/fzliang/reid-project/custom/artifacts/h4wpp_density_sweep",
+    "summary_sha256": "bda9443e6aeba675bb0a5fd43a87765e9834f2611189e1ed4ded4ce381624b1c",
+    "seed_summary_sha256": "6268d298a648112b3966fbc05bb53ec0fd9a1a5c14bb360da2df8c2f515ea29d",
+    "full_artifact_manifest_sha256": "19f388ce99134346f8a6110ee5e0b9526ed76975ba645c3410b751792a48f8ec",
+    "result_files": 120
+  },
+  "result": {
+    "best_inference_stride": 1,
+    "best_inference_frequency_hz_at_30fps": 30.0,
+    "three_seed_macro_mean": 0.7379565660835844,
+    "three_seed_macro_population_std": 0.0041418130585104814,
+    "three_seed_weighted_mean": 0.7291242362525457
+  }
+}

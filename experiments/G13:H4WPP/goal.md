@@ -15,6 +15,10 @@ IMU 配对、session 划分和评估指标一致，只改变 H4W++ 推理帧间�
   宏平均 `80.89%`。
 - `E2:fullframe_loso3train`：H4W++ 每个视频帧推理一次，不使用稀疏推理填充；FrameAcc
   宏平均 `73.79%`，低于 E1 `7.10` 个百分点。
+- `E3:inference_density_sweep`：扫描 inference stride
+  `1,2,4,8,12,16,24,32,48,64`，每个密度做 seeds `0/42/123` 的四折 LOSO，选择
+  3-seed 平均最高的推理密度。已完成 120 runs；stride 1 最高，为
+  `73.80% ± 0.41%`。
 
 ## Decision rule
 

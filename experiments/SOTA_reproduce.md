@@ -20,6 +20,11 @@ G13 E2 已完成全帧对照：FrameAcc 宏平均 `73.79%`、加权总体 `72.91
 “稀疏推理/前向填充”作为独立性能来源记录，而不能把 E1 的全部收益归因于 3-D
 skeleton 表征。
 
+G13 E3 进一步完成 10 个 inference strides、3 seeds、四折 LOSO 的 120-run profiling。
+按预注册的 3-seed 四折宏平均，stride 1 最高且最稳定：`73.80% ± 0.41%`；stride 16
+为 `72.84% ± 5.10%`。因此 `80.89%` 仍是 seed 42 的单次 SOTA，而稳健密度推荐为
+全帧 stride 1。详细结果见 `G13:H4WPP/E3:inference_density_sweep`。
+
 模型选择不使用测试 session 或独立验证 session，20 epochs 后按训练集
 `train_top1` 保存 best checkpoint。该选择契约与有验证集的历史四折结果不同，必须
 按本节协议复现。

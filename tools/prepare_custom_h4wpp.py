@@ -156,6 +156,13 @@ def prepare(args) -> Path:
         imu = np.stack(imu_list, axis=1).astype(np.float32)
         h4w_path = _extract(args, session, video, tracks, extract_out)
         detections, _ = _load_h4w(h4w_path, len(timestamps))
+        inference_stride = max(1, int(args.frame_stride))
+        if inference_stride > 1:
+            detections = {
+                frame: frame_detections
+                for frame, frame_detections in detections.items()
+                if frame % inference_stride == 0
+            }
         skeleton = np.zeros((len(timestamps), 2, 17, 3), dtype=np.float32)
         extract_boxes = np.zeros((len(timestamps), 2, 4), dtype=np.float32)
         extract_vis = np.zeros((len(timestamps), 2), dtype=bool)
@@ -214,7 +221,7 @@ def prepare(args) -> Path:
         }
         path = seq_dir / f"custom_{session}.npz"
         write_sequence_npz(path, payload)
-        write_sequence_meta(path.with_suffix(".json"), {"dataset": "custom", "sequence_id": f"custom_{session}", "n_frames": len(timestamps), "imu_dim": 7, "h4wpp_skeleton": str(h4w_path)})
+        write_sequence_meta(path.with_suffix(".json"), {"dataset": "custom", "sequence_id": f"custom_{session}", "n_frames": len(timestamps), "imu_dim": 7, "h4wpp_skeleton": str(h4w_path), "h4wpp_inference_frame_stride": inference_stride})
         print(f"[prepared] {session}: frames={len(timestamps)}, visible={int(extract_vis.sum())}/{extract_vis.size}")
     slice_cfg = {
         "window_len": args.window_len,
@@ -227,7 +234,17 @@ def prepare(args) -> Path:
         "skeleton_normalize": args.skeleton_normalize,
     }
     run_slice_from_npz(out, out, slice_cfg)
-    (out / "prepared.json").write_text(json.dumps({"dataset": "custom", "h4wpp": True}, indent=2), encoding="utf-8")
+    (out / "prepared.json").write_text(
+        json.dumps(
+            {
+                "dataset": "custom",
+                "h4wpp": True,
+                "h4wpp_inference_frame_stride": max(1, int(args.frame_stride)),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return out
 
 
