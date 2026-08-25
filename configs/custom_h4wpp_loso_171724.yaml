@@ -1,0 +1,32 @@
+project: custom_h4wpp_loso_171724
+preprocess:
+  dataset: custom
+  reuse_prepared: true
+  prepared_root: /data/fzliang/reid-project/custom/preprocessed/h4wpp_w24/loso_20260211_171724
+slice:
+  window_len: 24
+  stride: 16
+  train_sessions: "20260211_171423,20260211_172257,20260211_172522"
+  val_sessions: ""
+  test_sessions: "20260211_171724"
+  multi_person: true
+  skeleton_normalize: true
+train:
+  model: {type: hybrid}
+  epochs: 20
+  best_metric: train_top1
+  batch_size: 64
+  num_workers: 4
+  compute_imu_stats: true
+  imu_sensor: ""
+  repeat_single_sensor: 1
+  device: cuda
+  seed: 42
+  output: {output_root: /data/fzliang/reid-project/custom/artifacts/train/h4wpp_loso3train, run_name: test_20260211_171724}
+test:
+  batch_size: 64
+  device: cuda
+  output: {output_root: /data/fzliang/reid-project/custom/artifacts/evaluate/h4wpp_loso3train, run_name: test_20260211_171724}
+  metrics:
+    frame_acc: {enabled: true}
+    group_test: {enabled: true, group_sizes: "2,4,6,8", num_trials: 100, chunk_windows: 30, min_chunk_windows: 15, seed: 42}

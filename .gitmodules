@@ -4,3 +4,6 @@
 [submodule "third-party/ByteTrack"]
 	path = third-party/ByteTrack
 	url = https://github.com/L-Ark/ByteTrack.git
+[submodule "third-party/Hand4Whole-plus-plus_RELEASE"]
+	path = third-party/Hand4Whole-plus-plus_RELEASE
+	url = https://github.com/mks0601/Hand4Whole-plus-plus_RELEASE.git

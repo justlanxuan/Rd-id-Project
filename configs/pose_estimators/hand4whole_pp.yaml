@@ -1,0 +1,8 @@
+# Hand4Whole++ compatibility backend.  The setup script pins the source code;
+# licensed model assets are supplied through explicit environment variables.
+h4wpp_root: ${REID_H4WPP_ROOT}
+h4wpp_checkpoint: ${REID_H4WPP_CHECKPOINT}
+h4wpp_python: ${REID_H4WPP_PYTHON}
+h4wpp_device: cuda
+h4wpp_batch_size: 2
+tracks_root: ${REID_TRACKS_ROOT}

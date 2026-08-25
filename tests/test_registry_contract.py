@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.core import Registry
-from src.modules.extractors import EXTRACTOR_REGISTRY, build_extractor
+from src.modules.extractors import EXTRACTOR_REGISTRY, Hand4WholePPExtractor, build_extractor
 from src.modules.pose_estimators.alphapose_full import AlphaPoseFullConfig, AlphaPoseFullEstimator
 from src.modules.trackers.bytetrack import ByteTrackConfig, ByteTrackTracker
 
@@ -25,7 +25,13 @@ def test_registry_is_domain_scoped_and_fail_loud():
 
 
 def test_extractor_registry_exposes_official_and_experimental_implementations():
-    assert EXTRACTOR_REGISTRY.names() == ("alphapose_full", "bytetrack_alphapose", "wham")
+    assert EXTRACTOR_REGISTRY.names() == (
+        "alphapose_full",
+        "bytetrack_alphapose",
+        "hand4whole_pp",
+        "wham",
+    )
+    assert Hand4WholePPExtractor.capabilities.experimental is False
     with pytest.raises(RuntimeError, match="experimental"):
         build_extractor("wham", {})
 

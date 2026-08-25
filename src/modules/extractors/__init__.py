@@ -13,6 +13,7 @@ from src.config.config import substitute_variables
 from src.modules.extractors.alphapose_full import AlphaPoseFullExtractor
 from src.modules.extractors.base import ExtractorCapabilities, VideoSkeletonExtractor
 from src.modules.extractors.bytetrack_alphapose import ByteTrackAlphaPoseExtractor
+from src.modules.extractors.hand4whole_pp import Hand4WholePPExtractor
 from src.modules.extractors.registry import EXTRACTOR_REGISTRY, build_extractor
 from src.modules.extractors.wham import WHAMExtractor
 
@@ -95,6 +96,7 @@ def assemble_extract_config(extract_cfg: dict[str, Any]) -> dict[str, Any]:
 __all__ = [
     "AlphaPoseFullExtractor",
     "ByteTrackAlphaPoseExtractor",
+    "Hand4WholePPExtractor",
     "EXTRACTOR_REGISTRY",
     "ExtractorCapabilities",
     "VideoSkeletonExtractor",

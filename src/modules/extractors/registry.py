@@ -32,6 +32,13 @@ def _build_wham(cfg: dict[str, Any]) -> VideoSkeletonExtractor:
     return WHAMExtractor(cfg)
 
 
+@EXTRACTOR_REGISTRY.register("hand4whole_pp")
+def _build_hand4whole_pp(cfg: dict[str, Any]) -> VideoSkeletonExtractor:
+    from .hand4whole_pp import Hand4WholePPExtractor
+
+    return Hand4WholePPExtractor(cfg)
+
+
 def build_extractor(
     name: str,
     cfg: dict[str, Any],

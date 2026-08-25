@@ -19,6 +19,7 @@ def validate_prepared_dataset(
     expected_window_len: int | None = None,
     expected_stride: int | None = None,
     allow_singleton_test_groups: bool = False,
+    allow_empty_validation: bool = False,
 ) -> Path:
     root = Path(root_dir).expanduser().resolve()
     split_rows: dict[str, list[dict[str, str]]] = {}
@@ -28,7 +29,7 @@ def validate_prepared_dataset(
             raise FileNotFoundError(f"Prepared dataset is missing {csv_path}")
         with csv_path.open("r", newline="") as handle:
             rows = list(csv.DictReader(handle))
-        if not rows:
+        if not rows and not (split == "val" and allow_empty_validation):
             raise ValueError(f"Prepared dataset split is empty: {csv_path}")
         split_rows[split] = rows
 
@@ -45,7 +46,7 @@ def validate_prepared_dataset(
         split: {str(row.get(split_identity, "")) for row in rows if str(row.get(split_identity, ""))}
         for split, rows in split_rows.items()
     }
-    if any(not values for values in identities.values()):
+    if any(not values for split, values in identities.items() if not (split == "val" and allow_empty_validation)):
         raise ValueError(f"Prepared dataset has an empty {split_identity} split identity")
     for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
         overlap = identities[left] & identities[right]
@@ -116,6 +117,8 @@ def _validate_window_contract(
 ) -> None:
     """Check the actual CSV window geometry, not only the requested config."""
     for split, rows in split_rows.items():
+        if not rows:
+            continue
         if expected_window_len is not None:
             observed_lengths = {
                 int(row["window_end"]) - int(row["window_start"])

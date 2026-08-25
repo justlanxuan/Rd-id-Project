@@ -148,7 +148,9 @@ artifact. Supported registry names are:
 - `bytetrack_alphapose`: tracking plus AlphaPose, requiring
   the complete external repository and weights;
 - `wham`: experimental and rejected from production paths unless explicitly
-  enabled.
+  enabled;
+- `hand4whole_pp`: repository-managed Hand4Whole++ compatibility backend,
+  producing canonical 3-D H36M-17 skeletons from existing person tracks.
 
 Relevant cache controls are:
 
@@ -171,6 +173,57 @@ git submodule update --init --recursive
 
 Machine-specific repository, environment, and checkpoint paths belong in
 local YAML files, not source defaults.
+
+### Hand4Whole++ compatibility backend
+
+The repository pins the upstream Hand4Whole++ source as
+`third-party/Hand4Whole-plus-plus_RELEASE` and installs the pinned WiLoR and
+MMPose source revisions under `third-party/_deps/`.  The setup command also
+applies the small WiLoR interface patch needed by the H4W++ hand-control
+branch:
+
+```bash
+git submodule update --init --recursive
+conda env create -f environment-h4wpp.yml
+conda activate reid_h4wpp
+python tools/setup_h4wpp.py --install
+python tools/setup_h4wpp.py --check
+```
+
+Model checkpoints and SMPL/SMPL-X/MANO/FLAME assets are not redistributed by
+this repository because their upstream licenses and file sizes do not permit
+vendoring.  Place licensed assets in the relative layout shown by
+`tools/setup_h4wpp.py --check`, or copy an existing H4W++ asset tree with:
+
+```bash
+python tools/setup_h4wpp.py --weights-root /path/to/h4wpp-assets
+python tools/setup_h4wpp.py --download-public
+python tools/setup_h4wpp.py --check
+```
+
+The runtime has no hidden dependency on the old external project checkout.
+Set the following variables when using the extractor:
+
+```bash
+export REID_H4WPP_ROOT="$PWD/third-party/Hand4Whole-plus-plus_RELEASE"
+export REID_H4WPP_CHECKPOINT="$PWD/models/hand4whole_plus_plus/snapshot_6.pth"
+export REID_H4WPP_PYTHON="$(command -v python)"  # reid_h4wpp, not reid_project
+export REID_TRACKS_ROOT=/path/to/alphapose/tracks
+```
+
+The H4W++ extractor explicitly assembles the external Python paths in its
+subprocess environment and emits the repository's H36M-17 schema; it does not
+modify `sys.path` or import from an unrelated local project at runtime.  The
+Custom SOTA protocol and reproducible three-train/one-test LOSO commands are
+documented in
+[`experiments/H4WPP:custom_loso3train/final_report.md`](experiments/H4WPP:custom_loso3train/final_report.md).
+
+After the Custom prepared cache has been generated, the recorded SOTA can be
+reproduced with one repository command:
+
+```bash
+python tools/run_h4wpp_loso.py --gpu 0
+```
 
 ### Model compatibility
 

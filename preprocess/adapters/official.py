@@ -74,6 +74,7 @@ class CustomAdapter(DatasetAdapter):
                 expected_window_len=_optional_int(slice_config.get("window_len")),
                 expected_stride=_optional_int(slice_config.get("stride")),
                 allow_singleton_test_groups=allow_singletons,
+                allow_empty_validation=not _as_set(slice_config.get("val_sessions", [])),
             )
             return PreprocessArtifact(self.dataset_name, prepared, None, prepared=True)
 
@@ -116,6 +117,7 @@ def _reuse_prepared(
         expected_window_len=_optional_int(slice_config.get("window_len")),
         expected_stride=_optional_int(slice_config.get("stride")),
         allow_singleton_test_groups=allow_singletons,
+        allow_empty_validation=not _as_set(slice_config.get("val_sessions", [])),
     )
     return PreprocessArtifact(adapter.dataset_name, prepared, None, prepared=True)
 

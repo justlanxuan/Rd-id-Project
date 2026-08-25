@@ -117,6 +117,23 @@ def test_prepared_cache_validator_accepts_disjoint_sessions(tmp_path):
     ) == tmp_path.resolve()
 
 
+def test_prepared_cache_validator_allows_explicitly_empty_validation(tmp_path):
+    _write_prepared_split(tmp_path, "train", "session_train")
+    _write_prepared_split(tmp_path, "val", "session_val")
+    _write_prepared_split(tmp_path, "test", "session_test")
+    val_csv = tmp_path / "windows_val.csv"
+    header = val_csv.read_text().splitlines()[0]
+    val_csv.write_text(header + "\n")
+
+    with pytest.raises(ValueError, match="split is empty"):
+        validate_prepared_dataset(tmp_path)
+    assert validate_prepared_dataset(
+        tmp_path,
+        expected_test_sessions={"session_test"},
+        allow_empty_validation=True,
+    ) == tmp_path.resolve()
+
+
 def test_prepared_cache_validator_rejects_session_leakage(tmp_path):
     _write_prepared_split(tmp_path, "train", "shared_session")
     _write_prepared_split(tmp_path, "val", "session_val")
