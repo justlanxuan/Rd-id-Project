@@ -1,19 +1,20 @@
-"""Realtime inference policies.
-
-This package is reserved for streaming selectors that keep state across
-incoming windows. The S08 merge target is offline-only for now.
-"""
+"""Realtime inference policies with explicit streaming state."""
 
 from __future__ import annotations
 
 from typing import Any
 
-
-def build_realtime_policy(name: str = "global", **kwargs: Any):
-    raise ValueError(
-        "No realtime inference policies are registered yet; "
-        f"requested policy={name!r}."
-    )
+from .tracklet_history import TrackletHistoryRealtimePolicy
 
 
-__all__ = ["build_realtime_policy"]
+def build_realtime_policy(
+    name: str = "tracklet_history", **kwargs: Any
+) -> TrackletHistoryRealtimePolicy:
+    """Build a stateful realtime policy by name."""
+    policy = str(name).strip().lower().replace("-", "_")
+    if policy in {"tracklet_history", "history", "g8", "g8_full_session"}:
+        return TrackletHistoryRealtimePolicy(**kwargs)
+    raise ValueError(f"Unknown realtime inference policy: {name!r}")
+
+
+__all__ = ["TrackletHistoryRealtimePolicy", "build_realtime_policy"]
