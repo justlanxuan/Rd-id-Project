@@ -40,6 +40,12 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
     camera = str(preprocess_cfg.get("camera", "cam1"))
     sensor_order = parse_sensor_order(preprocess_cfg.get("sensor_order"))
     imu_cfg = preprocess_cfg.get("imu", {}) if isinstance(preprocess_cfg.get("imu"), dict) else {}
+    conditioner = str(imu_cfg.get("conditioner", "identity") or "identity").strip().lower()
+    if conditioner not in {"", "identity"}:
+        raise ValueError(
+            "TotalCapture preprocessing currently supports only the identity IMU conditioner; "
+            "RG23 requires raw gyro columns and is currently available for Custom CSV input."
+        )
     imu_output_format = str(imu_cfg.get("output_format", "legacy_48d")).strip().lower()
     imu_sensor = str(imu_cfg.get("sensor", "L_LowArm")).strip()
     if imu_output_format not in {"7d", "legacy_48d"}:

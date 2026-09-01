@@ -16,5 +16,7 @@ def write_sequence_npz(path: Path, payload: dict[str, Any]) -> Path:
 
 
 def write_sequence_meta(path: Path, meta: dict[str, Any]) -> Path:
-    path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    output = dict(meta)
+    output.setdefault("data_layer", "standardized")
+    path.write_text(json.dumps(output, indent=2), encoding="utf-8")
     return path

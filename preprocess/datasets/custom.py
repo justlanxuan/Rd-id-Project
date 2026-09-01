@@ -25,9 +25,11 @@ from preprocess.common.imu import (
     convert_single_imu_to_48,
     lowpass_filter_fft,
     parse_imu_csv,
+    parse_imu_csv_with_gyro,
     resample_imu_to_target,
     rotmat_to_quat_wxyz,
 )
+from preprocess.common.imu_conditioning import condition_imu
 from preprocess.common.sequence import write_sequence_meta, write_sequence_npz
 from preprocess.common.video import find_video_for_sequence, get_video_resolution, write_video_manifest
 
@@ -191,6 +193,11 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
     lowpass_cutoff = float(imu_cfg.get("lowpass_cutoff_hz", 0.0) or 0.0)
     lowpass_fs_hz = float(imu_cfg.get("lowpass_fs_hz", 100.0) or 100.0)
     use_48d = bool(imu_cfg.get("use_48d", True))
+    conditioner = str(imu_cfg.get("conditioner", "identity") or "identity").strip().lower()
+    conditioner = {"rg23": "madgwick6", "madgwick": "madgwick6"}.get(conditioner, conditioner)
+    if conditioner not in {"identity", "madgwick6"}:
+        raise ValueError(f"Unsupported preprocess.imu.conditioner={conditioner!r}")
+    conditioner_beta = float(imu_cfg.get("conditioner_beta", 0.033))
     skeleton_normalize = _parse_bool(preprocess_cfg.get("skeleton_normalize"), default=False)
     extract_cfg = resolve_extract_config(cfg)
 
@@ -207,15 +214,28 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
         if not imu_path.exists():
             continue
         try:
-            timestamps_ms, quat4, acc3 = parse_imu_csv(imu_path)
+            if conditioner == "madgwick6":
+                timestamps_ms, quat4, acc3, gyro3 = parse_imu_csv_with_gyro(imu_path)
+                quat4 = condition_imu(conditioner, timestamps_ms, quat4, acc3, gyro3, conditioner_beta)
+            else:
+                timestamps_ms, quat4, acc3 = parse_imu_csv(imu_path)
+                quat4 = condition_imu(conditioner, timestamps_ms, quat4, acc3, beta=conditioner_beta)
         except Exception as exc:
             print(f"[WARN] Failed to parse {imu_path}: {exc}")
             continue
 
-        imu_7d = convert_single_imu_to_7d(quat4, acc3)
+        output_acc = acc3
+        imu_7d = convert_single_imu_to_7d(quat4, output_acc)
         if lowpass_cutoff > 0:
-            imu_7d = lowpass_filter_fft(imu_7d, lowpass_cutoff, lowpass_fs_hz)
-        imu_feat = convert_single_imu_to_48(quat4, acc3) if use_48d else imu_7d
+            if conditioner == "identity":
+                # Keep the historical identity orientation while filtering
+                # only the acceleration channels.
+                imu_7d = lowpass_filter_fft(imu_7d, lowpass_cutoff, lowpass_fs_hz)
+                output_acc = imu_7d[:, :3]
+            else:
+                output_acc = lowpass_filter_fft(output_acc, lowpass_cutoff, lowpass_fs_hz)
+                imu_7d = convert_single_imu_to_7d(quat4, output_acc)
+        imu_feat = convert_single_imu_to_48(quat4, output_acc) if use_48d else imu_7d
 
         tlen = imu_feat.shape[0]
         frame_ids = np.arange(tlen, dtype=np.int64)
@@ -249,6 +269,11 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
             "sequence_id": np.array(sequence_id, dtype=object),
             "frame_ids": frame_ids,
             "imu": imu,
+            "imu_channels": np.asarray(
+                ["acc_x", "acc_y", "acc_z", "quat_w", "quat_x", "quat_y", "quat_z"],
+                dtype=object,
+            ) if not use_48d else np.asarray([f"legacy_{idx}" for idx in range(48)], dtype=object),
+            "imu_location": np.array("custom_single_sensor", dtype=object),
             "imu_ids": imu_ids,
             "gt_person_ids": gt_person_ids,
             "gt_bboxes": gt_bboxes,
@@ -275,6 +300,8 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
             "video_path": str(video_path) if video_path is not None else "",
             "n_frames": int(tlen),
             "imu_dim": int(imu.shape[-1]),
+            "imu_conditioner": conditioner,
+            "imu_conditioner_beta": conditioner_beta,
         }
         write_sequence_meta(out_path.with_suffix(".json"), meta)
         sequence_payloads.append(payload)

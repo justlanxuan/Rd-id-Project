@@ -88,6 +88,12 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
         raise ValueError(f"No EgoHumans cache files matched configured sessions under {extracted_root}")
 
     sensor_name = str(preprocess_cfg.get("imu", {}).get("sensor", "LeftWrist"))
+    conditioner = str(preprocess_cfg.get("imu", {}).get("conditioner", "identity") or "identity").strip().lower()
+    if conditioner not in {"", "identity"}:
+        raise ValueError(
+            "EgoHumans preprocessing currently supports only the identity IMU conditioner; "
+            "RG23 requires raw native-rate gyro data, which is not exposed by this cache adapter."
+        )
     for session, person_paths in sorted(grouped.items()):
         person_records = [np.load(path, allow_pickle=True).item() for path in person_paths]
         tlen = min(int(record["pose2d"].shape[0]) for record in person_records)

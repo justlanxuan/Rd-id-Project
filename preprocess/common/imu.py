@@ -126,6 +126,21 @@ def parse_imu_csv(imu_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     return timestamps_ms, quat4, acc3
 
 
+def parse_imu_csv_with_gyro(imu_path: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Parse custom IMU CSV including gyro values in radians per second."""
+    timestamps_ms, quat4, acc3 = parse_imu_csv(imu_path)
+    with imu_path.open("r", newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    gx_col = _find_col_with_prefix(("角速度X", "gyro_x", "gyrox"), rows[0])
+    gy_col = _find_col_with_prefix(("角速度Y", "gyro_y", "gyroy"), rows[0])
+    gz_col = _find_col_with_prefix(("角速度Z", "gyro_z", "gyroz"), rows[0])
+    gyro3 = np.asarray(
+        [[float(row[gx_col]), float(row[gy_col]), float(row[gz_col])] for row in rows],
+        dtype=np.float32,
+    )
+    return timestamps_ms, quat4, acc3, np.deg2rad(gyro3).astype(np.float32)
+
+
 def convert_single_imu_to_48(quat4: np.ndarray, acc3: np.ndarray) -> np.ndarray:
     """Convert single-sensor IMU to 48D by repeating 12D four times."""
     T = quat4.shape[0]
@@ -161,3 +176,10 @@ def _find_col(candidates: list[str], row: dict[str, str]) -> str:
         if candidate in row:
             return candidate
     raise KeyError(f"Could not find any of {candidates} in CSV columns: {list(row.keys())}")
+
+
+def _find_col_with_prefix(prefixes: tuple[str, ...], row: dict[str, str]) -> str:
+    for key in row:
+        if any(key.strip().lower().startswith(prefix.lower()) for prefix in prefixes):
+            return key
+    raise KeyError(f"Could not find a column starting with {prefixes}; available={list(row.keys())}")

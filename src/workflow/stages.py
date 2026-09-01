@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from preprocess.adapters import build_dataset_adapter
+from preprocess.adapters.validation import validate_preprocess_output
 from preprocess.common.slice import run_slice_from_npz
+from preprocess.derived import derive_sequences
 from src.config import load_config
 
 from .base import PipelineStage
@@ -39,18 +41,29 @@ class PreprocessStage(PipelineStage):
             manifest_csv=manifest_csv or None,
         )
 
+        data_root = artifact.output_dir
+        derived_cfg = preprocess_cfg.get("derived", {})
+        derived_enabled = isinstance(derived_cfg, dict) and bool(derived_cfg.get("enabled", False))
+        if derived_enabled:
+            derived_output = str(derived_cfg.get("output", "")).strip()
+            if not derived_output:
+                raise ValueError("PREPROCESS.DERIVED.OUTPUT was not resolved for an enabled derived-data stage")
+            data_root = derive_sequences(artifact.output_dir, derived_output, derived_cfg)
+            validate_preprocess_output(dataset, data_root)
+
         slice_cfg = cfg.get("slice", {})
         if not isinstance(slice_cfg, dict):
             raise TypeError(f"SLICE must be a mapping, got {type(slice_cfg).__name__}.")
-        if slice_cfg and not artifact.prepared:
-            run_slice_from_npz(artifact.output_dir, artifact.output_dir, slice_cfg)
+        if slice_cfg and (not artifact.prepared or derived_enabled):
+            run_slice_from_npz(data_root, data_root, slice_cfg)
 
         next_state.update(
             {
                 "dataset": artifact.dataset,
-                "preprocess_dir": str(artifact.output_dir),
-                "data_root": str(artifact.output_dir),
+                "preprocess_dir": str(data_root),
+                "data_root": str(data_root),
                 "prepared_cache": artifact.prepared,
+                "derived_data": derived_enabled,
             }
         )
         return next_state

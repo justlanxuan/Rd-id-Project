@@ -349,6 +349,21 @@ def _resolve_paths(cfg: CN) -> CN:
         if not preprocessed_dir.is_absolute():
             preprocessed_dir = Path(_resolve_project_data_path(str(preprocessed_dir), data_home))
         preprocessed_dir = preprocessed_dir.resolve()
+
+    derived_root = None
+    if bool(cfg.PREPROCESS.DERIVED.ENABLED):
+        derived_name = str(cfg.PREPROCESS.DERIVED.NAME or "derived").strip()
+        if not derived_name or derived_name in {".", ".."} or Path(derived_name).name != derived_name:
+            raise ValueError("PREPROCESS.DERIVED.NAME must be a simple directory name")
+        configured_derived = str(cfg.PREPROCESS.DERIVED.OUTPUT or "").strip()
+        if configured_derived:
+            derived_root = Path(configured_derived).expanduser()
+            if not derived_root.is_absolute():
+                derived_root = Path(_resolve_project_data_path(configured_derived, data_home))
+        else:
+            derived_root = preprocessed_dir / "derived" / derived_name
+        cfg.PREPROCESS.DERIVED.OUTPUT = str(derived_root.resolve())
+
     skeleton_dir = dataset_home / "skeleton" / str(cfg.EXTRACT.POSE_ESTIMATOR or "alphapose").strip().lower()
     artifacts_dir = dataset_home / "artifacts" / project
 
@@ -372,9 +387,9 @@ def _resolve_paths(cfg: CN) -> CN:
 
     if "SLICE" in cfg and cfg.SLICE.WINDOW_LEN:
         if not cfg.SLICE.OUT_DIR:
-            cfg.SLICE.OUT_DIR = str(preprocessed_dir)
+            cfg.SLICE.OUT_DIR = str(derived_root or preprocessed_dir)
         if cfg.PREPROCESS.DATASET and not cfg.SLICE.ROOT:
-            cfg.SLICE.ROOT = str(preprocessed_dir)
+            cfg.SLICE.ROOT = str(derived_root or preprocessed_dir)
         if cfg.SLICE.SKELETON_SOURCE == "alphapose" and cfg.EXTRACT.RESULTS_ROOT and not cfg.SLICE.SKELETON_ROOT:
             cfg.SLICE.SKELETON_ROOT = cfg.EXTRACT.RESULTS_ROOT
 
