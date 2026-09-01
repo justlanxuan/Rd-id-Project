@@ -113,8 +113,8 @@ def _evaluate_one_session(
 
     t_len = len(session.frame_ids)
     pose2d = session.extract_skeleton[..., :2].astype(np.float32)
-    imu7 = session.imu.astype(np.float32)
-    n_imu = int(imu7.shape[1])
+    imu_values = session.imu.astype(np.float32)
+    n_imu = int(imu_values.shape[1])
     skel_smooth = int(getattr(model.video_encoder, "skeleton_smooth_kernel", 9))
     image_height = float(getattr(model.video_encoder, "image_height", 1080.0))
     image_width = float(getattr(model.video_encoder, "image_width", 1920.0))
@@ -123,10 +123,15 @@ def _evaluate_one_session(
     if not per_window_features:
         with torch.no_grad():
             pose_full = torch.from_numpy(pose2d.transpose(1, 0, 2, 3)).float()
-            imu_full = torch.from_numpy(imu7.transpose(1, 0, 2)).float()
+            imu_full = torch.from_numpy(imu_values.transpose(1, 0, 2)).float()
             raw_full = raw_pose_sequence(pose_full, skel_smooth, image_height, image_width)
             vec_full = skeleton_tokens(pose_full, skel_smooth, image_height, image_width)
-            imu_feat_full = imu_sequence_features(imu_full, imu_smooth, imu_feature_mode)
+            imu_feat_full = imu_sequence_features(
+                imu_full,
+                imu_smooth,
+                imu_feature_mode,
+                session.imu_channels,
+            )
 
     centers: list[int] = []
     history_assignments: list[np.ndarray] = []
@@ -140,7 +145,7 @@ def _evaluate_one_session(
         with torch.no_grad():
             if per_window_features:
                 skeleton = torch.from_numpy(pose2d[start:end, active].transpose(1, 0, 2, 3)).float().to(device)
-                imu = torch.from_numpy(imu7[start:end].transpose(1, 0, 2)).float().to(device)
+                imu = torch.from_numpy(imu_values[start:end].transpose(1, 0, 2)).float().to(device)
                 if getattr(model, "cross_pair_head", None) is not None:
                     similarity = model.cross_pair_logits(imu, skeleton).detach().cpu().numpy()
                 else:
@@ -239,6 +244,12 @@ def evaluate_full_session_frameacc(
     swap_sessions = {str(value) for value in frame_cfg.CUSTOM_IMU_RAW_SWAP_SESSIONS}
     filename = str(frame_cfg.TRACKLET_FILENAME)
     model = _load_model(cfg, checkpoint, device)
+    imu_feature_spec = getattr(model, "imu_feature_spec", None)
+    legacy_sensor = str(
+        cfg.TRAIN.IMU_SENSOR
+        or cfg.PREPROCESS.IMU.SENSOR
+        or getattr(cfg.SLICE, "LEGACY_SENSOR", "L_LowArm")
+    ).strip()
 
     session_results: list[dict[str, Any]] = []
     for session_name in sessions:
@@ -250,6 +261,8 @@ def evaluate_full_session_frameacc(
             custom_imu_root=imu_root,
             raw_swap=session_name in swap_sessions,
             normalize_extract_skeleton=bool(frame_cfg.NORMALIZE_EXTRACT_SKELETON),
+            imu_feature_spec=imu_feature_spec,
+            legacy_sensor=legacy_sensor,
         )
         session_results.append(_evaluate_one_session(cfg, model, session, device))
 

@@ -6,6 +6,7 @@ from typing import Any
 
 import torch
 
+from src.features.imu import feature_spec_from_cfg
 from src.models.base import ModelCapabilities
 from src.modules.encoders import HybridIMUEncoder, HybridSkeletonEncoder
 from src.modules.matchers import IMUVideoMatcher
@@ -13,11 +14,14 @@ from src.modules.matchers import IMUVideoMatcher
 
 def build_hybrid_model(cfg: Any, device: torch.device) -> IMUVideoMatcher:
     model_cfg = cfg.TRAIN.MODEL
+    imu_feature_spec = feature_spec_from_cfg(cfg)
     hidden = int(model_cfg.HYBRID_HIDDEN)
     imu_encoder = HybridIMUEncoder(
         hidden_size=hidden,
         imu_smooth_kernel=int(model_cfg.HYBRID_IMU_SMOOTH),
         feature_mode=str(model_cfg.HYBRID_IMU_FEATURE_MODE),
+        input_dim=imu_feature_spec.input_dim,
+        input_channels=imu_feature_spec.channels,
         temporal_layers=int(model_cfg.HYBRID_TEMPORAL_LAYERS),
         temporal_kernel=int(model_cfg.HYBRID_TEMPORAL_KERNEL),
         temporal_mode=str(model_cfg.HYBRID_TEMPORAL_MODE),
@@ -46,6 +50,7 @@ def build_hybrid_model(cfg: Any, device: torch.device) -> IMUVideoMatcher:
         cross_pair_head=bool(model_cfg.CROSS_PAIR_HEAD),
         cross_pair_hidden_dim=int(model_cfg.CROSS_PAIR_HIDDEN_DIM),
     )
+    model.imu_feature_spec = imu_feature_spec
     model.capabilities = ModelCapabilities(
         pair_logits=bool(model_cfg.PAIR_HEAD),
         cross_pair_logits=bool(model_cfg.CROSS_PAIR_HEAD),

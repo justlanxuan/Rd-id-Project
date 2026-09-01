@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from preprocess.common.slice import (
     parse_xsens_sensors,
 )
 from preprocess.common.video import find_video_for_sequence, get_video_resolution, write_video_manifest
+from src.features.imu import infer_channel_specs
 
 __all__ = ["run_preprocess", "main"]
 
@@ -100,6 +102,10 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
 
         frame_ids = np.arange(tlen, dtype=np.int64)
         imu = imu_values[:, np.newaxis, :].astype(np.float32)
+        imu_channel_metadata = json.dumps(
+            [spec.to_dict() for spec in infer_channel_specs(imu_channels)],
+            sort_keys=True,
+        )
         imu_ids = np.array([0], dtype=np.int64)
         gt_person_ids = np.array([0], dtype=np.int64)
         gt_skeleton = skel17[:, np.newaxis, :, :].astype(np.float32)
@@ -112,6 +118,7 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
             "frame_ids": frame_ids,
             "imu": imu,
             "imu_channels": np.asarray(imu_channels, dtype=object),
+            "imu_channel_metadata": np.asarray(imu_channel_metadata, dtype=object),
             "imu_location": np.array(imu_sensor if imu_output_format == "7d" else "multi_sensor_legacy", dtype=object),
             "imu_ids": imu_ids,
             "gt_person_ids": gt_person_ids,
@@ -121,7 +128,16 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
             "gt_skeleton_meters": skel17_meters[:, np.newaxis, :, :].astype(np.float32),
         }
         write_sequence_npz(sequences_dir / f"{sequence_id}.npz", payload)
-        write_sequence_meta(sequences_dir / f"{sequence_id}.json", {"dataset": "totalcapture", "sequence_id": sequence_id, "video_path": str(video_path) if video_path is not None else ""})
+        write_sequence_meta(
+            sequences_dir / f"{sequence_id}.json",
+            {
+                "dataset": "totalcapture",
+                "sequence_id": sequence_id,
+                "video_path": str(video_path) if video_path is not None else "",
+                "imu_channels": list(imu_channels),
+                "imu_channel_metadata": json.loads(imu_channel_metadata),
+            },
+        )
 
     write_video_manifest(manifest_path, video_paths)
     print(f"Wrote {len(sequences)} totalcapture sequence NPZ files to {sequences_dir}")

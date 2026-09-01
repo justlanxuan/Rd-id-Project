@@ -1,16 +1,20 @@
 """Hybrid shoulder-vector encoders.
 
 This encoder pair represents video as raw shoulder-relative pose plus
-shoulder-local arm-vector tokens, and IMU as raw 7D acceleration/quaternion
-sequence. The IMU encoder and video encoder live together because they are a
+shoulder-local arm-vector tokens, and IMU as a named, configurable sequence of
+channels. The IMU encoder and video encoder live together because they are a
 matched representation pair.
 """
 
 from __future__ import annotations
 
+from typing import Sequence
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from src.features.imu import CANONICAL_7D_CHANNELS
 
 LEFT_SHOULDER = 5
 RIGHT_SHOULDER = 6
@@ -396,32 +400,84 @@ def h36m_feature_sequence(
     return result.float()
 
 
-def raw_imu_sequence(imu: torch.Tensor, smooth_kernel: int = 5) -> torch.Tensor:
-    if imu.shape[-1] < 7:
-        raise ValueError(f"Hybrid raw IMU encoder expects at least 7 channels, got {tuple(imu.shape)}")
-    imu = imu[..., :7].double()
-    acc = _moving_average(imu[..., :3], smooth_kernel)
-    quat = _moving_average(imu[..., 3:7], smooth_kernel)
-    quat = quat / _norm(quat).clamp_min(1e-8).unsqueeze(-1)
-    return torch.cat([acc, quat], dim=-1).float()
+def _canonical_7d_indices(
+    channel_names: Sequence[str] | None, width: int
+) -> tuple[tuple[int, int, int], tuple[int, int, int, int]] | None:
+    if width != len(CANONICAL_7D_CHANNELS):
+        return None
+    names = CANONICAL_7D_CHANNELS if channel_names is None else tuple(channel_names)
+    if set(names) != set(CANONICAL_7D_CHANNELS) or len(names) != len(CANONICAL_7D_CHANNELS):
+        return None
+    positions = {name: index for index, name in enumerate(names)}
+    return (
+        tuple(positions[name] for name in CANONICAL_7D_CHANNELS[:3]),
+        tuple(positions[name] for name in CANONICAL_7D_CHANNELS[3:]),
+    )
 
 
-def imu_sequence_features(imu: torch.Tensor, smooth_kernel: int = 5, mode: str = "raw") -> torch.Tensor:
-    raw = raw_imu_sequence(imu, smooth_kernel)
+def _is_canonical_7d(channel_names: Sequence[str] | None, width: int) -> bool:
+    return _canonical_7d_indices(channel_names, width) is not None
+
+
+def _prepare_named_imu(imu: torch.Tensor, smooth_kernel: int, channel_names: Sequence[str] | None) -> torch.Tensor:
+    values = imu.double()
+    if channel_names is None:
+        channel_names = CANONICAL_7D_CHANNELS if values.shape[-1] == 7 else None
+    if channel_names is not None and len(channel_names) != values.shape[-1]:
+        raise ValueError(
+            f"IMU channel count={len(channel_names)} does not match tensor width={values.shape[-1]}"
+        )
+    values = _moving_average(values, smooth_kernel)
+    if channel_names is None:
+        return values.float()
+    indices = {name: index for index, name in enumerate(channel_names)}
+    quaternion_names = ("quat_w", "quat_x", "quat_y", "quat_z")
+    if all(name in indices for name in quaternion_names):
+        quaternion = values[..., [indices[name] for name in quaternion_names]]
+        quaternion = quaternion / _norm(quaternion).clamp_min(1e-8).unsqueeze(-1)
+        values = values.clone()
+        values[..., [indices[name] for name in quaternion_names]] = quaternion
+    return values.float()
+
+
+def raw_imu_sequence(
+    imu: torch.Tensor,
+    smooth_kernel: int = 5,
+    channel_names: Sequence[str] | None = None,
+) -> torch.Tensor:
+    if imu.ndim < 2 or imu.shape[-1] <= 0:
+        raise ValueError(f"Hybrid IMU encoder expects [B,T,C] with C>0, got {tuple(imu.shape)}")
+    return _prepare_named_imu(imu, smooth_kernel, channel_names)
+
+
+def imu_sequence_features(
+    imu: torch.Tensor,
+    smooth_kernel: int = 5,
+    mode: str = "raw",
+    channel_names: Sequence[str] | None = None,
+) -> torch.Tensor:
+    raw = raw_imu_sequence(imu, smooth_kernel, channel_names)
     mode = str(mode).lower()
     if mode == "raw":
         return raw
     if mode != "dynamic":
         raise ValueError(f"Unsupported hybrid IMU feature mode: {mode}")
 
-    acc = raw[..., :3]
-    quat = raw[..., 3:7]
-    acc_centered = acc - acc.mean(dim=1, keepdim=True)
-    acc_delta = _diff_same(acc, 1)
-    dots = (quat[:, 1:] * quat[:, :-1]).sum(dim=-1).abs().clamp(0.0, 1.0)
-    ang = 2.0 * torch.acos(dots)
-    ang_speed = torch.cat([torch.zeros_like(ang[:, :1]), ang], dim=1).unsqueeze(-1)
-    return torch.cat([raw, acc_centered, acc_delta, ang_speed], dim=-1).float()
+    canonical_indices = _canonical_7d_indices(channel_names, raw.shape[-1])
+    if canonical_indices is not None:
+        acc_idx, quat_idx = canonical_indices
+        acc = raw[..., list(acc_idx)]
+        quat = raw[..., list(quat_idx)]
+        acc_centered = acc - acc.mean(dim=1, keepdim=True)
+        acc_delta = _diff_same(acc, 1)
+        dots = (quat[:, 1:] * quat[:, :-1]).sum(dim=-1).abs().clamp(0.0, 1.0)
+        ang = 2.0 * torch.acos(dots)
+        ang_speed = torch.cat([torch.zeros_like(ang[:, :1]), ang], dim=1).unsqueeze(-1)
+        return torch.cat([raw, acc_centered, acc_delta, ang_speed], dim=-1).float()
+
+    centered = raw - raw.mean(dim=1, keepdim=True)
+    delta = _diff_same(raw, 1)
+    return torch.cat([raw, centered, delta], dim=-1).float()
 
 
 class TemporalConv(nn.Module):
@@ -724,6 +780,8 @@ class HybridIMUEncoder(nn.Module):
         hidden_size: int = 128,
         imu_smooth_kernel: int = 5,
         feature_mode: str = "raw",
+        input_dim: int = 7,
+        input_channels: Sequence[str] | None = None,
         temporal_layers: int = 2,
         temporal_kernel: int = 5,
         temporal_mode: str = "gru",
@@ -733,11 +791,23 @@ class HybridIMUEncoder(nn.Module):
         self.hidden_size = hidden_size
         self.imu_smooth_kernel = imu_smooth_kernel
         self.feature_mode = str(feature_mode).lower()
-        input_dim = 14 if self.feature_mode == "dynamic" else 7
-        self.register_buffer("imu_mu", torch.zeros(1, 1, input_dim), persistent=True)
-        self.register_buffer("imu_sd", torch.ones(1, 1, input_dim), persistent=True)
+        if int(input_dim) <= 0:
+            raise ValueError(f"Hybrid IMU input_dim must be positive, got {input_dim}")
+        self.base_input_dim = int(input_dim)
+        self.input_channels = tuple(input_channels) if input_channels is not None else None
+        if self.input_channels is not None and len(self.input_channels) != self.base_input_dim:
+            raise ValueError(
+                f"Hybrid IMU input channel count={len(self.input_channels)} "
+                f"does not match input_dim={self.base_input_dim}"
+            )
+        canonical_dynamic = _is_canonical_7d(self.input_channels, self.base_input_dim)
+        self.feature_dim = 14 if self.feature_mode == "dynamic" and canonical_dynamic else (
+            self.base_input_dim * 3 if self.feature_mode == "dynamic" else self.base_input_dim
+        )
+        self.register_buffer("imu_mu", torch.zeros(1, 1, self.feature_dim), persistent=True)
+        self.register_buffer("imu_sd", torch.ones(1, 1, self.feature_dim), persistent=True)
         self.raw = RawTower(
-            input_dim,
+            self.feature_dim,
             hidden_size,
             temporal_layers=temporal_layers,
             kernel_size=temporal_kernel,
@@ -746,11 +816,21 @@ class HybridIMUEncoder(nn.Module):
         )
 
     def forward(self, imu: torch.Tensor) -> torch.Tensor:
-        x = imu_sequence_features(imu, self.imu_smooth_kernel, self.feature_mode)
+        x = imu_sequence_features(imu, self.imu_smooth_kernel, self.feature_mode, self.input_channels)
+        if x.shape[-1] != self.feature_dim:
+            raise ValueError(
+                f"Hybrid IMU feature width={x.shape[-1]} does not match configured width={self.feature_dim}; "
+                f"input_shape={tuple(imu.shape)}, channels={self.input_channels}"
+            )
         x = (x - self.imu_mu) / self.imu_sd.clamp_min(1e-6)
         return F.normalize(self.raw(x), dim=1)
 
     def forward_sequence(self, imu: torch.Tensor) -> torch.Tensor:
-        x = imu_sequence_features(imu, self.imu_smooth_kernel, self.feature_mode)
+        x = imu_sequence_features(imu, self.imu_smooth_kernel, self.feature_mode, self.input_channels)
+        if x.shape[-1] != self.feature_dim:
+            raise ValueError(
+                f"Hybrid IMU feature width={x.shape[-1]} does not match configured width={self.feature_dim}; "
+                f"input_shape={tuple(imu.shape)}, channels={self.input_channels}"
+            )
         x = (x - self.imu_mu) / self.imu_sd.clamp_min(1e-6)
         return self.raw.forward_sequence(x)

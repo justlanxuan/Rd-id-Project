@@ -28,26 +28,38 @@ def _imu_indices(payload: dict[str, np.ndarray]) -> tuple[np.ndarray, tuple[int,
     if "imu" not in payload:
         raise KeyError("Derived IMU transform requires an 'imu' array")
     imu = np.asarray(payload["imu"])
-    if imu.ndim < 2 or imu.shape[-1] != 7:
-        raise ValueError(
-            "The selected derived IMU transform requires canonical 7D input "
-            f"[acc3 + quat4], got shape {imu.shape}"
-        )
-    channels = ()
+    if imu.ndim < 2 or imu.shape[-1] <= 0:
+        raise ValueError(f"Derived IMU transform requires [T,C] or [T,P,C], got shape {imu.shape}")
+    channels: tuple[str, ...] = ()
     if "imu_channels" in payload:
         channels = tuple(str(value) for value in np.asarray(payload["imu_channels"]).reshape(-1))
-    if channels and len(channels) != 7:
-        raise ValueError(f"Canonical 7D IMU declares {len(channels)} channels: {channels}")
+    if channels and len(channels) != imu.shape[-1]:
+        raise ValueError(f"IMU declares {len(channels)} channels for width {imu.shape[-1]}: {channels}")
     if channels:
-        try:
-            acc_idx = tuple(channels.index(channel) for channel in ACC_CHANNELS)
-            quat_idx = tuple(channels.index(channel) for channel in QUAT_CHANNELS)
-        except ValueError as exc:
-            raise ValueError(f"Canonical IMU channels must contain {ACC_CHANNELS + QUAT_CHANNELS}, got {channels}") from exc
+        acc_idx = tuple(channels.index(channel) for channel in ACC_CHANNELS if channel in channels)
+        quat_idx = tuple(channels.index(channel) for channel in QUAT_CHANNELS if channel in channels)
+        if len(acc_idx) not in {0, len(ACC_CHANNELS)}:
+            raise ValueError(f"IMU acceleration channels must be complete, got {channels}")
+        if len(quat_idx) not in {0, len(QUAT_CHANNELS)}:
+            raise ValueError(f"IMU quaternion channels must be complete, got {channels}")
     else:
+        if imu.shape[-1] != 7:
+            raise ValueError(
+                "Arbitrary-width derived IMU input must declare imu_channels; "
+                f"only unnamed 7D input is supported for legacy compatibility, got shape {imu.shape}"
+            )
         acc_idx = (0, 1, 2)
         quat_idx = (3, 4, 5, 6)
     return imu.astype(np.float32, copy=False), acc_idx, quat_idx
+
+
+def _require_imu_channels(
+    acc_idx: tuple[int, ...], quat_idx: tuple[int, ...], *, need_acc: bool = False, need_quat: bool = False
+) -> None:
+    if need_acc and len(acc_idx) != len(ACC_CHANNELS):
+        raise ValueError("The selected derived IMU transform requires acc_x, acc_y, and acc_z channels")
+    if need_quat and len(quat_idx) != len(QUAT_CHANNELS):
+        raise ValueError("The selected derived IMU transform requires quat_w, quat_x, quat_y, and quat_z channels")
 
 
 def _enforce_quaternion_continuity(quat: np.ndarray) -> np.ndarray:
@@ -66,8 +78,9 @@ def identity_transform(
 def imu_acc_noise_transform(
     payload: dict[str, np.ndarray], rng: np.random.Generator, spec: DerivedDataSpec
 ) -> dict[str, np.ndarray]:
-    """Add noise only to acceleration channels of canonical 7D IMU data."""
+    """Add noise only to named acceleration channels, preserving other columns."""
     imu, acc_idx, _ = _imu_indices(payload)
+    _require_imu_channels(acc_idx, (), need_acc=True)
     std = float(spec.imu_acc_noise_std)
     if std < 0:
         raise ValueError("imu_acc_noise_std must be non-negative")
@@ -84,8 +97,9 @@ def imu_acc_noise_transform(
 def imu_acc_lowpass_transform(
     payload: dict[str, np.ndarray], _rng: np.random.Generator, spec: DerivedDataSpec
 ) -> dict[str, np.ndarray]:
-    """Apply an offline low-pass only to acceleration channels of 7D IMU."""
+    """Apply an offline low-pass only to named acceleration channels."""
     imu, acc_idx, _ = _imu_indices(payload)
+    _require_imu_channels(acc_idx, (), need_acc=True)
     cutoff = float(spec.imu_acc_lowpass_cutoff_hz)
     if cutoff < 0 or float(spec.imu_acc_lowpass_fs_hz) <= 0:
         raise ValueError("IMU low-pass cutoff must be non-negative and sampling rate must be positive")
@@ -112,6 +126,7 @@ def imu_acc_spike_transform(
 ) -> dict[str, np.ndarray]:
     """Inject sparse acceleration spikes without corrupting orientation."""
     imu, acc_idx, _ = _imu_indices(payload)
+    _require_imu_channels(acc_idx, (), need_acc=True)
     ratio = float(spec.imu_acc_spike_ratio)
     scale = float(spec.imu_acc_spike_scale)
     output = _copy_payload(payload)
@@ -138,6 +153,7 @@ def imu_acc_dropout_hold_transform(
 ) -> dict[str, np.ndarray]:
     """Hold the previous acceleration sample over sparse dropout intervals."""
     imu, acc_idx, _ = _imu_indices(payload)
+    _require_imu_channels(acc_idx, (), need_acc=True)
     output = _copy_payload(payload)
     updated = imu.copy()
     validity = np.ones(imu.shape[:2], dtype=bool) if imu.ndim == 3 else np.ones(imu.shape[:1], dtype=bool)
@@ -165,6 +181,7 @@ def imu_quat_repair_transform(
 ) -> dict[str, np.ndarray]:
     """Normalize canonical quaternions and repair their temporal sign flips."""
     imu, _acc_idx, quat_idx = _imu_indices(payload)
+    _require_imu_channels((), quat_idx, need_quat=True)
     output = _copy_payload(payload)
     updated = imu.copy()
     updated[..., list(quat_idx)] = enforce_quaternion_continuity(imu[..., list(quat_idx)])
@@ -176,12 +193,13 @@ def imu_quat_repair_transform(
 def imu_mount_rotation_transform(
     payload: dict[str, np.ndarray], _rng: np.random.Generator, spec: DerivedDataSpec
 ) -> dict[str, np.ndarray]:
-    """Apply RC-style mount/global orientation changes coherently to 7D IMU.
+    """Apply RC-style mount/global orientation changes coherently to named IMU channels.
 
     The local acceleration is rotated by the inverse mount rotation while the
     orientation is composed as ``R_global * R_base * R_mount``.
     """
     imu, acc_idx, quat_idx = _imu_indices(payload)
+    _require_imu_channels(acc_idx, quat_idx, need_acc=True, need_quat=True)
     mount = Rotation.from_euler("xyz", spec.imu_mount_euler_xyz_deg, degrees=True).as_matrix().astype(np.float32)
     global_heading = Rotation.from_euler("z", spec.imu_global_yaw_deg, degrees=True).as_matrix().astype(np.float32)
 

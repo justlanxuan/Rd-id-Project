@@ -422,11 +422,10 @@ def _resolve_paths(cfg: CN) -> CN:
     _normalize_known_output_paths(cfg, data_home)
 
     if "TRAIN" in cfg and str(cfg.TRAIN.MODEL.TYPE).lower() == "hybrid":
-        # The hybrid encoder consumes raw 7D IMU. Legacy configs often set
-        # IMU_SENSOR/R_LowArm to expand one sensor into the old 48D LSTM format;
-        # that path is incompatible with the hybrid default.
-        cfg.TRAIN.IMU_SENSOR = ""
-        cfg.TRAIN.REPEAT_SINGLE_SENSOR = 1
+        # IMU_SENSOR remains available as the legacy 48D-to-feature bridge.
+        # The feature contract, rather than this compatibility field, controls
+        # the model input width for the modern hybrid path.
+        cfg.TRAIN.REPEAT_SINGLE_SENSOR = int(cfg.TRAIN.REPEAT_SINGLE_SENSOR)
     return cfg
 
 

@@ -11,7 +11,8 @@ import numpy as np
 
 from preprocess.common.extract import coco_to_h36m17
 from preprocess.common.slice import normalize_skeleton
-from preprocess.datasets.custom import load_custom_rawcsv_7d_sequence
+from preprocess.datasets.custom import load_custom_rawcsv_7d_sequence, load_custom_rawcsv_feature_sequence
+from src.features.imu import IMUFeatureSpec, select_imu_features
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class CustomTrackletSession:
     sequence_id: str
     frame_ids: np.ndarray
     imu: np.ndarray
+    imu_channels: tuple[str, ...]
     imu_ids: np.ndarray
     gt_person_ids: np.ndarray
     gt_bboxes: np.ndarray
@@ -93,6 +95,8 @@ def load_custom_tracklet_session(
     custom_imu_root: str | Path | None = None,
     raw_swap: bool = False,
     normalize_extract_skeleton: bool = True,
+    imu_feature_spec: IMUFeatureSpec | None = None,
+    legacy_sensor: str = "L_LowArm",
 ) -> CustomTrackletSession:
     """Load one complete session; no segment slicing or tracklet linking occurs."""
     npz_path = Path(aligned_npz).expanduser().resolve()
@@ -148,16 +152,61 @@ def load_custom_tracklet_session(
                 gt_to_extract_map[time_index, gt_index] = int(active[best])
 
     if custom_imu_root is None:
-        imu = np.asarray(data["imu"], dtype=np.float32)[:t_len, :, :7]
+        values = np.asarray(data["imu"], dtype=np.float32)[:t_len]
+        if values.ndim == 2:
+            values = values[:, np.newaxis, :]
+        if values.ndim != 3:
+            raise ValueError(f"Expected aligned IMU [T,C] or [T,P,C], got {values.shape}")
+        if imu_feature_spec is None:
+            if values.shape[-1] >= 48:
+                from preprocess.datasets.custom import legacy_imu48_sensor_to_7d
+
+                imu = legacy_imu48_sensor_to_7d(values, legacy_sensor)
+            elif values.shape[-1] >= 7:
+                imu = values[..., :7]
+            else:
+                raise ValueError(f"Aligned IMU has no compatible 7D view: {values.shape}")
+            imu_channels = (
+                "acc_x", "acc_y", "acc_z", "quat_w", "quat_x", "quat_y", "quat_z"
+            )
+        else:
+            imu = np.stack(
+                [
+                    select_imu_features(
+                        values[:, person],
+                        data.get("imu_channels"),
+                        imu_feature_spec,
+                        legacy_sensor=legacy_sensor,
+                    )
+                    for person in range(values.shape[1])
+                ],
+                axis=1,
+            )
+            imu_channels = imu_feature_spec.channels
     else:
         imu_person_map = str(data["imu_person_map"].item()) if "imu_person_map" in data else None
-        imu = load_custom_rawcsv_7d_sequence(
-            Path(custom_imu_root),
-            session,
-            frame_ids,
-            imu_person_map=imu_person_map,
-            n_persons=len(gt_person_ids),
-        )
+        if imu_feature_spec is None:
+            imu = load_custom_rawcsv_7d_sequence(
+                Path(custom_imu_root),
+                session,
+                frame_ids,
+                imu_person_map=imu_person_map,
+                n_persons=len(gt_person_ids),
+            )
+            imu_channels = (
+                "acc_x", "acc_y", "acc_z", "quat_w", "quat_x", "quat_y", "quat_z"
+            )
+        else:
+            imu = load_custom_rawcsv_feature_sequence(
+                Path(custom_imu_root),
+                session,
+                frame_ids,
+                imu_feature_spec,
+                imu_person_map=imu_person_map,
+                n_persons=len(gt_person_ids),
+                legacy_sensor=legacy_sensor,
+            )
+            imu_channels = imu_feature_spec.channels
     if raw_swap:
         imu = imu[:, ::-1].copy()
 
@@ -165,6 +214,7 @@ def load_custom_tracklet_session(
         sequence_id=sequence_id,
         frame_ids=frame_ids,
         imu=imu,
+        imu_channels=imu_channels,
         imu_ids=np.asarray(data.get("imu_ids", gt_person_ids), dtype=np.int64),
         gt_person_ids=gt_person_ids,
         gt_bboxes=gt_bboxes,

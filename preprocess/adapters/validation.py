@@ -35,6 +35,16 @@ def validate_preprocess_output(dataset: str, output_dir: str | Path) -> Path:
             frame_ids = np.asarray(data["frame_ids"])
             imu = np.asarray(data["imu"])
             skeleton = np.asarray(data["gt_skeleton"])
+            if imu.ndim not in {2, 3} or imu.shape[-1] <= 0:
+                raise ValueError(f"Canonical sequence {path} has invalid IMU shape {imu.shape}")
+            if "imu_channels" in data.files:
+                channels = tuple(str(value) for value in np.asarray(data["imu_channels"]).reshape(-1))
+                if len(channels) != imu.shape[-1]:
+                    raise ValueError(
+                        f"Canonical sequence {path} declares {len(channels)} IMU channels for width {imu.shape[-1]}"
+                    )
+                if len(set(channels)) != len(channels):
+                    raise ValueError(f"Canonical sequence {path} has duplicate IMU channel names: {channels}")
             if frame_ids.ndim != 1 or len(frame_ids) == 0:
                 raise ValueError(f"Canonical sequence {path} has invalid frame_ids shape {frame_ids.shape}")
             if len(frame_ids) > 1 and not np.all(np.diff(frame_ids.astype(np.float64)) > 0):

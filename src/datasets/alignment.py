@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import Dataset
 
 from src.datasets.transforms import lowpass_filter_fft, single_sensor_to_48d
+from src.features.imu import IMUFeatureSpec, select_imu_features
 
 
 class WindowAlignmentDataset(Dataset):
@@ -29,6 +30,7 @@ class WindowAlignmentDataset(Dataset):
         return_root_trajectory: bool = False,
         root_source: Literal["auto", "bbox_center", "bbox_full", "bbox_vel", "root_3d"] = "auto",
         per_session_stats: Optional[Dict[str, Tuple[np.ndarray, np.ndarray]]] = None,
+        imu_feature_spec: IMUFeatureSpec | None = None,
     ) -> None:
         self.csv_path = Path(csv_path)
         if not self.csv_path.exists():
@@ -46,9 +48,12 @@ class WindowAlignmentDataset(Dataset):
         self.return_root_trajectory = return_root_trajectory
         self.root_source = root_source
         self.per_session_stats = per_session_stats
+        self.imu_feature_spec = imu_feature_spec
 
         if self.imu_sensor is not None and self.repeat_single_sensor <= 0:
             raise ValueError(f"repeat_single_sensor must be > 0, got {self.repeat_single_sensor}")
+        if self.imu_feature_spec is not None:
+            self._validate_feature_contract()
 
     @staticmethod
     def _read_rows(path: Path) -> List[Dict[str, str]]:
@@ -69,6 +74,38 @@ class WindowAlignmentDataset(Dataset):
             data = np.load(path, allow_pickle=True)
             self._cache[path] = {k: data[k] for k in data.files}
         return self._cache[path]
+
+    def _validate_feature_contract(self) -> None:
+        """Check every referenced IMU artifact before the first training batch."""
+        assert self.imu_feature_spec is not None
+        checked: set[Path] = set()
+        for row in self.rows:
+            relative = row.get("imu_npz_path") or row["npz_path"]
+            path = (self.root_dir / relative).resolve()
+            if path in checked:
+                continue
+            checked.add(path)
+            data = self._load_npz(path)
+            values = np.asarray(data["imu"])
+            if values.ndim == 3:
+                if values.shape[1] == 0:
+                    raise ValueError(f"IMU artifact has no persons: {path}")
+                probe = values[0, 0]
+            elif values.ndim == 2:
+                probe = values[0]
+            else:
+                raise ValueError(f"Expected IMU [T,C] or [T,P,C] in {path}, got {values.shape}")
+            selected = select_imu_features(
+                probe[None, :],
+                data.get("imu_channels"),
+                self.imu_feature_spec,
+                legacy_sensor=self.imu_sensor or "L_LowArm",
+            )
+            if selected.shape[-1] != self.imu_feature_spec.input_dim:
+                raise ValueError(
+                    f"Selected IMU feature width mismatch in {path}: "
+                    f"expected={self.imu_feature_spec.input_dim}, got={selected.shape[-1]}"
+                )
 
     def __getitem__(self, index: int):
         row = self.rows[index]
@@ -112,11 +149,27 @@ class WindowAlignmentDataset(Dataset):
         else:
             raise ValueError(f"Unknown skeleton_source: {skeleton_source}")
 
-        if self.imu_sensor is not None:
+        if self.imu_feature_spec is not None:
+            imu = select_imu_features(
+                imu,
+                imu_data.get("imu_channels"),
+                self.imu_feature_spec,
+                legacy_sensor=self.imu_sensor or "L_LowArm",
+            )
+        elif self.imu_sensor is not None:
             imu = self._single_sensor_to_48d(imu, self.imu_sensor, self.repeat_single_sensor)
 
         if self.imu_lowpass_cutoff_hz is not None:
-            imu = lowpass_filter_fft(imu, self.imu_lowpass_cutoff_hz, self.imu_lowpass_fs_hz)
+            if self.imu_feature_spec is None:
+                imu = lowpass_filter_fft(imu, self.imu_lowpass_cutoff_hz, self.imu_lowpass_fs_hz)
+            else:
+                filtered = imu.copy()
+                for index, channel in enumerate(self.imu_feature_spec.channels):
+                    if channel.startswith("acc_") or channel in {"acc_magnitude", "acc_magnitude_centered"}:
+                        filtered[:, index] = lowpass_filter_fft(
+                            imu[:, index], self.imu_lowpass_cutoff_hz, self.imu_lowpass_fs_hz
+                        )
+                imu = filtered
 
         session = row.get("session", "")
         if self.per_session_stats is not None and session in self.per_session_stats:

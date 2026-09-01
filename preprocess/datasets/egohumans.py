@@ -7,6 +7,7 @@ and optionally writes a video manifest for downstream extraction.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ import numpy as np
 from preprocess.common.config import load_config
 from preprocess.common.sequence import write_sequence_meta, write_sequence_npz
 from preprocess.common.video import write_video_manifest
+from src.features.imu import infer_channel_specs
 
 __all__ = ["main", "run_preprocess"]
 
@@ -124,6 +126,11 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
         skeleton[..., 2] = visibility[:, :, None]
         bboxes = _pose_bboxes(pose2d, visibility)
         sequence_id = f"egohumans_{session}"
+        imu_channels = ("acc_x", "acc_y", "acc_z", "quat_w", "quat_x", "quat_y", "quat_z")
+        imu_channel_metadata = json.dumps(
+            [spec.to_dict() for spec in infer_channel_specs(imu_channels)],
+            sort_keys=True,
+        )
         payload = {
             "schema_version": np.array("1.0", dtype=object),
             "video_path": np.array("", dtype=object),
@@ -131,10 +138,8 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
             "sequence_id": np.array(sequence_id, dtype=object),
             "frame_ids": np.arange(tlen, dtype=np.int64),
             "imu": imu.astype(np.float32),
-            "imu_channels": np.asarray(
-                ["acc_x", "acc_y", "acc_z", "quat_w", "quat_x", "quat_y", "quat_z"],
-                dtype=object,
-            ),
+            "imu_channels": np.asarray(imu_channels, dtype=object),
+            "imu_channel_metadata": np.asarray(imu_channel_metadata, dtype=object),
             "imu_location": np.array(sensor_name, dtype=object),
             "imu_ids": np.asarray(person_ids, dtype=np.int64),
             "gt_person_ids": np.asarray(person_ids, dtype=np.int64),
@@ -152,6 +157,8 @@ def run_preprocess(config_path: str | Path | None, output_dir: str | Path | None
                 "imu_location": sensor_name,
                 "n_frames": tlen,
                 "n_people": len(person_ids),
+                "imu_channels": list(imu_channels),
+                "imu_channel_metadata": json.loads(imu_channel_metadata),
             },
         )
 

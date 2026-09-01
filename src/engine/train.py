@@ -125,6 +125,7 @@ def main() -> None:
 
     model, cfg_name = build_alignment_model_from_cfg(cfg, device)
     capabilities = model.capabilities
+    imu_feature_spec = getattr(model, "imu_feature_spec", None)
 
     imu_mean = None
     imu_std = None
@@ -153,7 +154,11 @@ def main() -> None:
             )
         print(f"[INFO] Loaded per-session stats for {len(per_session_stats)} sessions: {sorted(per_session_stats.keys())}")
 
-    imu_sensor = T.IMU_SENSOR.strip() if T.IMU_SENSOR else None
+    imu_sensor = (
+        T.IMU_SENSOR.strip()
+        if T.IMU_SENSOR
+        else str(IMU_PRE.SENSOR or getattr(cfg.SLICE, "LEGACY_SENSOR", "L_LowArm")).strip()
+    )
     if capabilities.requires_orientation:
         train_ds = build_orientation_dataset(cfg, "train")
         try:
@@ -181,6 +186,7 @@ def main() -> None:
             return_root_trajectory=False,
             root_source="auto",
             per_session_stats=per_session_stats,
+            imu_feature_spec=imu_feature_spec,
         )
         try:
             val_ds = WindowAlignmentDataset(
@@ -195,6 +201,7 @@ def main() -> None:
                 return_root_trajectory=False,
                 root_source="auto",
                 per_session_stats=per_session_stats,
+                imu_feature_spec=imu_feature_spec,
             )
         except ValueError as e:
             if "No rows found" in str(e):

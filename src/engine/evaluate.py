@@ -32,6 +32,7 @@ from src.config import load_cfg
 from src.datasets import WindowAlignmentDataset, build_orientation_dataset
 from src.engine.similarity import encode_hybrid_precomputed, model_similarity_matrix
 from src.experiments import write_evaluation_run_record
+from src.features.imu import IMUFeatureSpec, select_imu_features
 from src.metrics import EmbeddingBundle, build_metric
 from src.metrics.turning import physical_turning_score
 from src.models.checkpoint import load_model_checkpoint
@@ -85,7 +86,12 @@ def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> Embedding
         imu_mean = np.asarray(stats["imu_mean"], dtype=np.float32)
         imu_std = np.asarray(stats["imu_std"], dtype=np.float32)
 
-    imu_sensor = T.IMU_SENSOR.strip() if T.IMU_SENSOR else None
+    imu_sensor = (
+        T.IMU_SENSOR.strip()
+        if T.IMU_SENSOR
+        else str(IMU_PRE.SENSOR or getattr(cfg.SLICE, "LEGACY_SENSOR", "L_LowArm")).strip()
+    )
+    imu_feature_spec = getattr(model, "imu_feature_spec", None)
     dataset = (
         build_orientation_dataset(cfg, "test")
         if model.capabilities.requires_orientation
@@ -100,6 +106,7 @@ def compute_embeddings(cfg, checkpoint: Path, device: torch.device) -> Embedding
             imu_lowpass_fs_hz=IMU_PRE.LOWPASS_FS_HZ,
             return_root_trajectory=False,
             root_source="auto",
+            imu_feature_spec=imu_feature_spec,
         )
     )
     loader = DataLoader(
@@ -235,6 +242,8 @@ def load_segment_eval_inputs(
     custom_imu_root: Path | None,
     custom_imu_split_mode: str = "test",
     raw_swap_sessions: set[str] | None = None,
+    imu_feature_spec: IMUFeatureSpec | None = None,
+    legacy_sensor: str = "L_LowArm",
 ) -> tuple[object, str, np.ndarray, np.ndarray]:
     data = np.load(npz_path, allow_pickle=True)
     sequence_id = str(data["sequence_id"].item())
@@ -245,44 +254,84 @@ def load_segment_eval_inputs(
     # for nonzero-offset segments, can select the wrong temporal slice.
     pose2d = data["extract_skeleton"][:, :, :, :2].astype(np.float32)
 
+    def select_segment_values(values: np.ndarray, available_channels=None) -> np.ndarray:
+        values = np.asarray(values, dtype=np.float32)
+        if values.ndim == 2:
+            values = values[:, np.newaxis, :]
+            squeeze_person = True
+        elif values.ndim == 3:
+            squeeze_person = False
+        else:
+            raise ValueError(f"Expected segment IMU [T,C] or [T,P,C], got {values.shape}")
+        if imu_feature_spec is None:
+            if values.shape[-1] >= 48:
+                selected = legacy_imu48_sensor_to_7d(values, legacy_sensor)
+            elif values.shape[-1] >= 7:
+                selected = values[..., :7]
+            else:
+                raise ValueError(
+                    f"Segment IMU has {values.shape[-1]} channels and no compatible legacy 7D view: {npz_path}"
+                )
+        else:
+            selected = np.stack(
+                [
+                    select_imu_features(
+                        values[:, person],
+                        available_channels,
+                        imu_feature_spec,
+                        legacy_sensor=legacy_sensor,
+                    )
+                    for person in range(values.shape[1])
+                ],
+                axis=1,
+            )
+        return selected[:, 0] if squeeze_person else selected
+
     if custom_imu_root is None:
-        imu = data["imu"].astype(np.float32)
-        if imu.shape[-1] >= 7:
-            if imu.shape[-1] >= 48:
-                return data, sequence_id, pose2d, legacy_imu48_sensor_to_7d(imu, "L_LowArm")
-            return data, sequence_id, pose2d, imu[..., :7]
-        raise ValueError(f"Segment IMU has {imu.shape[-1]} channels and no custom 7D IMU root was provided.")
+        return data, sequence_id, pose2d, select_segment_values(data["imu"], data.get("imu_channels"))
 
     session = sequence_id.split("_seg", 1)[0].split("custom_", 1)[1]
     seg_idx = int(sequence_id.rsplit("_seg", 1)[1])
     imu_list = []
     n_tracks = int(data["extract_person_ids"].shape[0])
     split_mode = custom_imu_split_mode.lower().strip()
-    for p in range(n_tracks):
-        if split_mode in {"rawcsv", "rawcsv_swap"}:
-            imu_person_map = None
-            if "imu_person_map" in data.files:
-                imu_person_map = str(data["imu_person_map"].item())
+    if split_mode in {"rawcsv", "rawcsv_swap"}:
+        from preprocess.datasets.custom import load_custom_rawcsv_feature_sequence
+
+        if imu_feature_spec is None:
             raw = load_custom_rawcsv_7d_sequence(
                 custom_imu_root,
                 session,
                 data["frame_ids"].astype(np.int64),
-                imu_person_map=imu_person_map,
+                imu_person_map=str(data["imu_person_map"].item()) if "imu_person_map" in data.files else None,
                 n_persons=n_tracks,
             )
-            if split_mode == "rawcsv_swap" or (raw_swap_sessions and session in raw_swap_sessions):
-                raw = raw[:, ::-1].copy()
-            return data, sequence_id, pose2d, raw
+        else:
+            raw = load_custom_rawcsv_feature_sequence(
+                custom_imu_root,
+                session,
+                data["frame_ids"].astype(np.int64),
+                imu_feature_spec,
+                imu_person_map=str(data["imu_person_map"].item()) if "imu_person_map" in data.files else None,
+                n_persons=n_tracks,
+                legacy_sensor=legacy_sensor,
+            )
+        if split_mode == "rawcsv_swap" or (raw_swap_sessions and session in raw_swap_sessions):
+            raw = raw[:, ::-1].copy()
+        return data, sequence_id, pose2d, raw
+
+    output_dim = imu_feature_spec.input_dim if imu_feature_spec is not None else 7
+    for p in range(n_tracks):
         if split_mode == "full":
             try:
                 raw = load_custom_split_7d_sequence(custom_imu_root, session, seg_idx, p, target_len=t_len)
             except FileNotFoundError:
-                imu_list.append(np.zeros((t_len, 7), dtype=np.float32))
+                imu_list.append(np.zeros((t_len, output_dim), dtype=np.float32))
                 continue
         elif split_mode == "test":
             test_npy = custom_imu_root / f"{session}_seg{seg_idx}_person{p}_test.npy"
             if not test_npy.exists():
-                imu_list.append(np.zeros((t_len, 7), dtype=np.float32))
+                imu_list.append(np.zeros((t_len, output_dim), dtype=np.float32))
                 continue
             raw = np.load(test_npy, allow_pickle=True).item()["imu"].astype(np.float32)
             if raw.ndim == 3:
@@ -296,9 +345,14 @@ def load_segment_eval_inputs(
                 "use 'test', 'full', 'rawcsv', or 'rawcsv_swap'."
             )
         if raw.shape[0] < t_len:
-            imu_list.append(np.zeros((t_len, 7), dtype=np.float32))
+            imu_list.append(np.zeros((t_len, output_dim), dtype=np.float32))
             continue
-        imu_list.append(raw[:t_len, :7])
+        imu_list.append(
+            select_segment_values(
+                raw[:t_len],
+                None,
+            )
+        )
     return data, sequence_id, pose2d, np.stack(imu_list, axis=1)
 
 
@@ -329,6 +383,12 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
             f"Model {model_name!r} does not declare segment_frame_acc capability."
         )
     model.eval()
+    imu_feature_spec = getattr(model, "imu_feature_spec", None)
+    imu_sensor = str(
+        cfg.TRAIN.IMU_SENSOR
+        or cfg.PREPROCESS.IMU.SENSOR
+        or getattr(cfg.SLICE, "LEGACY_SENSOR", "L_LowArm")
+    ).strip()
 
     window_size = int(frame_cfg.WINDOW_SIZE)
     stride = int(frame_cfg.STRIDE)
@@ -345,6 +405,8 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                 custom_imu_path,
                 custom_imu_split_mode,
                 raw_swap_sessions=raw_swap_sessions,
+                imu_feature_spec=imu_feature_spec,
+                legacy_sensor=imu_sensor,
             )
             t_len = int(data["frame_ids"].shape[0])
             n_imu = int(data["imu_ids"].shape[0])
@@ -360,7 +422,12 @@ def evaluate_segment_frameacc(cfg, checkpoint: Path, device: torch.device) -> Di
                     imu_full = torch.from_numpy(imu7[:t_len].transpose(1, 0, 2)).float()
                     raw_full = raw_pose_sequence(pose_full, skel_smooth, image_height, image_width)
                     vec_full = skeleton_tokens(pose_full, skel_smooth, image_height, image_width)
-                    imu_feat_full = imu_sequence_features(imu_full, imu_smooth, imu_feature_mode)
+                    imu_feat_full = imu_sequence_features(
+                        imu_full,
+                        imu_smooth,
+                        imu_feature_mode,
+                        getattr(imu_feature_spec, "channels", None),
+                    )
             centers = []
             assignments = []
             window_predictions = []

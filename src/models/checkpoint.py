@@ -11,6 +11,7 @@ import torch
 from torch import nn
 
 from src.core import Registry
+from src.features.imu import IMUFeatureSpec
 
 CheckpointAdapter = Callable[[Mapping[str, Any]], dict[str, torch.Tensor]]
 MODEL_CHECKPOINT_ADAPTERS: Registry[dict[str, torch.Tensor]] = Registry(
@@ -112,6 +113,29 @@ def load_model_checkpoint(
         raise ValueError(
             f"Checkpoint model_name={stored_model_name!r} does not match requested {model_name!r}."
         )
+    expected_features = getattr(model, "imu_feature_spec", None)
+    stored_features = payload.get("imu_feature_spec")
+    stored_feature_hash = str(payload.get("imu_feature_spec_sha256", "")).strip()
+    if isinstance(stored_features, Mapping):
+        stored_channels = tuple(str(value) for value in stored_features.get("channels", ()))
+        stored_spec = IMUFeatureSpec(
+            name=str(stored_features.get("name", "checkpoint")),
+            channels=stored_channels,
+            normalization=str(stored_features.get("normalization", "train")),
+            causal=bool(stored_features.get("causal", True)),
+            schema_version=str(stored_features.get("schema_version", "imu.feature.v1")),
+        )
+        if stored_feature_hash and stored_feature_hash != stored_spec.sha256:
+            raise ValueError("Checkpoint IMU feature contract hash does not match its serialized contract")
+        stored_feature_hash = stored_spec.sha256
+    if expected_features is not None and stored_feature_hash:
+        if not isinstance(expected_features, IMUFeatureSpec):
+            raise TypeError(f"model.imu_feature_spec must be IMUFeatureSpec, got {type(expected_features).__name__}")
+        if expected_features.sha256 != stored_feature_hash:
+            raise ValueError(
+                "Checkpoint IMU feature contract does not match the configured model input: "
+                f"checkpoint={stored_feature_hash}, configured={expected_features.sha256}"
+            )
     state = adapt_checkpoint_state(model_name, payload)
     dropped: list[str] = []
     if allow_shape_mismatch:
@@ -154,11 +178,18 @@ def model_checkpoint_metadata(model_name: str, model: nn.Module) -> dict[str, An
     capabilities = getattr(model, "capabilities", None)
     if capabilities is None:
         raise AttributeError(f"Model {type(model).__name__} has no capabilities declaration.")
-    return {
+    metadata = {
         "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
         "model_name": str(model_name),
         "model_capabilities": asdict(capabilities),
     }
+    feature_spec = getattr(model, "imu_feature_spec", None)
+    if feature_spec is not None:
+        if not isinstance(feature_spec, IMUFeatureSpec):
+            raise TypeError(f"model.imu_feature_spec must be IMUFeatureSpec, got {type(feature_spec).__name__}")
+        metadata["imu_feature_spec"] = feature_spec.to_dict()
+        metadata["imu_feature_spec_sha256"] = feature_spec.sha256
+    return metadata
 
 
 __all__ = [

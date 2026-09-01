@@ -117,6 +117,7 @@ def fit_hybrid_encoder_stats(model: torch.nn.Module, dataset: WindowAlignmentDat
     image_width = float(getattr(video_encoder, "image_width", 1920.0))
     imu_smooth = int(getattr(imu_encoder, "imu_smooth_kernel", 5))
     imu_feature_mode = str(getattr(imu_encoder, "feature_mode", "raw"))
+    imu_feature_channels = getattr(getattr(dataset, "imu_feature_spec", None), "channels", None)
 
     with torch.no_grad():
         for batch in loader:
@@ -139,7 +140,9 @@ def fit_hybrid_encoder_stats(model: torch.nn.Module, dataset: WindowAlignmentDat
                 vec_parts.append(
                     skeleton_tokens(skel, skel_smooth, image_height, image_width)
                 )
-            imu_parts.append(imu_sequence_features(imu, imu_smooth, imu_feature_mode))
+            imu_parts.append(
+                imu_sequence_features(imu, imu_smooth, imu_feature_mode, imu_feature_channels)
+            )
 
     imu = torch.cat(imu_parts, dim=0)
     imu_mu, imu_sd = _fit_tensor_stats(imu, (0, 1))
